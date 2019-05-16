@@ -1,0 +1,10 @@
+```
+docker run --rm \
+    --user "$(id -u)":"$(id -g)" \
+    -e USER=$USER \
+    -v "$PWD":/usr/src/mini-dns \
+    -w /usr/src/mini-dns \
+    -p 5546:5546/udp \
+    -it mini-dns \
+    /bin/bash
+```
