@@ -1,3 +1,9 @@
+# Docker 
+## Build 
+```
+ocker build -t mini-dns .
+```
+## Run
 ```
 docker run --rm \
     --user "$(id -u)":"$(id -g)" \

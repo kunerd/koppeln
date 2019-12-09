@@ -5,3 +5,5 @@ authors = ["kunerd"]
 edition = "2018"
 
 [dependencies]
+bytes = "0.4.12"
+byteorder = "1"
