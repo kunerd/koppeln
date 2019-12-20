@@ -7,3 +7,10 @@ edition = "2018"
 [dependencies]
 bytes = "0.4.12"
 byteorder = "1"
+nom = "5"
+bitflags = "1.2.1"
+
+
+[lib]
+name = "dns"
+path = "src/lib.rs"
