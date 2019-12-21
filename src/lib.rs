@@ -2,13 +2,17 @@ extern crate nom;
 use std::collections::VecDeque;
 
 use nom::{
-    number::complete::be_u16,
+    number::complete::{be_u8, be_u16},
     IResult,
     bits::{
         bits,
         complete::take
     },
-    sequence::tuple
+    sequence::tuple,
+    multi::{length_value, many_till},
+    bytes::complete::{tag,take_while1},
+    character::is_alphanumeric,
+    character::complete::alphanumeric1
 };
 
 #[derive(Debug)]
@@ -118,6 +122,104 @@ struct DnsHeader {
     // ar_count: u16
 }
 
+#[derive(Debug)]
+struct DnsQuestion {
+    labels: Vec<String>,
+    query_type: DnsType,
+    query_class: DnsClass
+}
+
+#[derive(Debug, PartialEq)]
+enum DnsType {
+    A,
+    NS,
+    MX,
+    SOA,
+    AAAA
+}
+
+impl From<u16> for DnsType {
+    fn from(value: u16) -> Self {
+        match value {
+            1 => DnsType::A,
+            2 => DnsType::NS,
+            3 => DnsType::MX,
+            4 => DnsType::MX,
+            6 => DnsType::SOA,
+            15 => DnsType::MX,
+            28 => DnsType::AAAA,
+            _ => panic!("This should not occur :(")
+        }
+    }
+}
+
+impl From<DnsType> for u16 {
+    fn from(value: DnsType) -> u16 {
+        match value {
+            DnsType::A => 1,
+             DnsType::NS => 2,
+             DnsType::SOA => 6,
+             DnsType::MX => 15,
+             DnsType::AAAA => 28,
+            _ => panic!("This should not occur :(")
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum DnsClass {
+    IN,
+    CS,
+    CH,
+    HS
+}
+
+impl From<u16> for DnsClass {
+    fn from(value: u16) -> Self {
+        match value {
+            1 => DnsClass::IN,
+            2 => DnsClass::CS,
+            3 => DnsClass::CH,
+            4 => DnsClass::HS,
+            _ => panic!("This should be an error :)")
+        }
+    }
+}
+
+impl From<DnsClass> for u16 {
+    fn from(value: DnsClass) -> Self {
+        match value {
+            DnsClass::IN => 1,
+            DnsClass::CS => 2,
+            DnsClass::CH => 3,
+            DnsClass::HS => 4,
+            _ => panic!("This should be an error :)")
+        }
+    }
+}
+
+impl DnsQuestion {
+    // fn from_packet(mut packet: &[u8]) -> Self {
+    //     let mut labels = Vec::with_capacity(10);
+
+    //     let mut length: usize =  packet.read_u8().unwrap() as usize;
+    //     while length > 0  {
+    //         labels.push(std::str::from_utf8(&packet[..length]).unwrap().to_string());
+    //         packet = &packet[length..];
+    //         length = packet.read_u8().unwrap() as usize;
+    //     }
+    //     let domain_name = labels.join(".");
+
+    //     let query_type = DnsType::from(packet.read_u16::<BigEndian>().unwrap());
+    //     let query_class = DnsClass::from(packet.read_u16::<BigEndian>().unwrap());
+    //     DnsQuestion {
+    //         domain_name,
+    //         query_type,
+    //         query_class
+    //     }
+    // }
+}
+
 fn take_one_bit((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
     let take_one = take::<_, u8, _, (_, _)>(1usize);
 
@@ -170,7 +272,60 @@ fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
     }))
 }
 
-impl DnsHeader {
+use nom::combinator::map;
+use nom::combinator::map_res;
+use nom::character::complete::alpha1;
+use nom::branch::alt;
+use nom::sequence::pair;
+use nom::character::complete;
+use nom::combinator::recognize;
+use nom::multi::separated_list;
+use nom::combinator::all_consuming;
+use nom::combinator::peek;
+use nom::character::complete::digit0;
+use nom::character::complete::alphanumeric0;
+use std::str;
+
+/// Implemented as described in [RFC 1035](https://tools.ietf.org/html/rfc1035#section-2.3.1)
+fn dns_label(input: &[u8]) -> IResult<&[u8], String> {
+    // TODO: add support for message compression as desribed in https://tools.ietf.org/html/rfc1035#section-4.1.4
+    let (rem, label) = map(
+        map_res(
+            length_value(
+                be_u8,
+                all_consuming(
+                    recognize(
+                        pair(
+                            peek(alpha1), // a label must start with an ASCII letter
+                            separated_list(complete::char('-'),
+                            alphanumeric1)
+                        )
+                    )
+                )
+            ),
+            str::from_utf8),
+        |s| { s.to_owned() }
+    )(input)?;
+
+    Ok((rem, label))
+}
+
+fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
+    let (rem, (labels, _)) = many_till(dns_label, tag("\0"))(input)?;
+
+    Ok((rem, labels))
+}
+
+fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
+    let parser = tuple((dns_labels, be_u16, be_u16));
+    
+    let (rem, (labels, qtype, qclass)) = parser(input)?;
+
+    Ok((rem, DnsQuestion {
+        labels,
+        query_type: qtype.into(),
+        query_class: qclass.into()
+    }))
 }
 
 
@@ -244,5 +399,73 @@ mod tests {
         let (_, header) = dns_header(raw_header).unwrap();
         
         assert_eq!(header.qd_count, 1);
+    }
+
+
+    #[test]
+    fn test_parse_hyphen_label() {
+        let raw_header = b"\x0Btest-hyphen";
+
+        let (_, label) = dns_label(raw_header).unwrap();
+
+        assert_eq!(label, String::from("test-hyphen"));
+    }
+
+    // #[test]
+    // fn test_parse_leading_digit_label() {
+    //     let raw_header = b"\x050test";
+
+    //     let (_, label) = dns_label(raw_header).unwrap();
+
+    //     assert_eq!(label, String::from("0test"));
+    // }
+
+    // #[test]
+    // fn test_parse_leading_hyphen_label() {
+    //     let raw_header = b"\x05-test";
+
+    //     let (_, label) = dns_label(raw_header).unwrap();
+
+    //     assert_eq!(label, String::from(""));
+    // }
+
+    // #[test]
+    // fn test_parse_tailing_hyphen_label() {
+    //     let raw_header = b"\x05test-";
+
+    //     let (_, label) = dns_label(raw_header).unwrap();
+
+    //     assert_eq!(label, String::from(""));
+    // }
+
+    #[test]
+    fn test_parse_alphabetic_label() {
+        let raw_header = b"\x04test";
+
+        let (_, label) = dns_label(raw_header).unwrap();
+
+        assert_eq!(label, String::from("test"));
+    }
+
+    #[test]
+    fn test_parse_labels() {
+        let raw_labels = b"\x04\x74\x65\x73\x74\x03\x64\x79\x6e\x07\x65\x78\x61\x6d\x70\x6c\x65\x03\x63\x6f\x6d\x00";
+
+        let (_, labels) = dns_labels(raw_labels).unwrap();
+
+        assert_eq!(labels[0], String::from("test"));
+        assert_eq!(labels[1], String::from("dyn"));
+    }
+
+    #[test]
+    fn test_parse_question() {
+        let raw_question = b"\x04\x74\x65\x73\x74\x03\x64\x79\x6e\x07\x65\x78\x61\x6d\x70\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01";
+
+        let(_, question) = dns_question(raw_question).unwrap();
+        println!("{:?}", question);
+        
+        assert_eq!(question.labels[0], String::from("test"));
+        assert_eq!(question.query_type, DnsType::A);
+        assert_eq!(question.query_class, DnsClass::IN);
     }
 }
