@@ -1,30 +1,19 @@
 extern crate nom;
-use std::collections::VecDeque;
+mod parser;
 
-use nom::{
-    number::complete::{be_u8, be_u16},
-    IResult,
-    bits::{
-        bits,
-        complete::take
-    },
-    sequence::tuple,
-    multi::{length_value, many_till},
-    bytes::complete::{tag,take_while1},
-    character::is_alphanumeric,
-    character::complete::alphanumeric1
-};
+use byteorder::{BigEndian, WriteBytesExt};
+use bytes::Bytes;
 
 #[derive(Debug)]
-enum DnsQr {
+pub enum DnsQr {
     Query,
-    Respons
+    Response,
 }
 
 impl From<u16> for DnsQr {
     fn from(value: u16) -> Self {
         if value == 1 {
-            DnsQr::Respons
+            DnsQr::Response
         } else {
             DnsQr::Query
         }
@@ -34,18 +23,18 @@ impl From<u16> for DnsQr {
 impl From<DnsQr> for u16 {
     fn from(value: DnsQr) -> Self {
         match value {
-            DnsQr::Respons => 1,
-            _ => 0
+            DnsQr::Response => 1,
+            _ => 0,
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
-enum DnsOpCode {
+pub enum DnsOpCode {
     StandardQuery,
     InversQuery,
     ServerStatusRequest,
-    Reserved(u8)
+    Reserved(u8),
 }
 
 impl From<u8> for DnsOpCode {
@@ -54,7 +43,7 @@ impl From<u8> for DnsOpCode {
             0 => DnsOpCode::StandardQuery,
             1 => DnsOpCode::InversQuery,
             2 => DnsOpCode::ServerStatusRequest,
-            value => DnsOpCode::Reserved(value)
+            value => DnsOpCode::Reserved(value),
         }
     }
 }
@@ -65,19 +54,19 @@ impl From<DnsOpCode> for u8 {
             DnsOpCode::StandardQuery => 0,
             DnsOpCode::InversQuery => 1,
             DnsOpCode::ServerStatusRequest => 2,
-            DnsOpCode::Reserved(value) => value
+            DnsOpCode::Reserved(value) => value,
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
-enum DnsResponseCode {
+pub enum DnsResponseCode {
     NoError,
     FormatError,
     ServerFailure,
     NameError,
     NotImplemented,
-    Refused
+    Refused,
 }
 
 impl From<u8> for DnsResponseCode {
@@ -88,7 +77,7 @@ impl From<u8> for DnsResponseCode {
             2 => DnsResponseCode::ServerFailure,
             3 => DnsResponseCode::NameError,
             4 => DnsResponseCode::NotImplemented,
-            _ => DnsResponseCode::Refused
+            _ => DnsResponseCode::Refused,
         }
     }
 }
@@ -101,45 +90,96 @@ impl From<DnsResponseCode> for u8 {
             DnsResponseCode::ServerFailure => 2,
             DnsResponseCode::NameError => 3,
             DnsResponseCode::NotImplemented => 4,
-            DnsResponseCode::Refused => 5
+            DnsResponseCode::Refused => 5,
         }
     }
 }
 
 #[derive(Debug)]
-struct DnsHeader {
-    id: u16,
+pub struct DnsHeader {
+    pub id: u16,
     // qr: DnsQr,
-    opcode: DnsOpCode,
-    truncated: bool,
-    authoritative_anser: bool,
-    recursion_desired: bool,
-    recursion_available: bool,
-    response_code: DnsResponseCode,
-    qd_count: u16,
-    // an_count: u16,
-    // ns_count: u16,
-    // ar_count: u16
+    pub opcode: DnsOpCode,
+    pub truncated: bool,
+    pub authoritative_anser: bool,
+    pub recursion_desired: bool,
+    pub recursion_available: bool,
+    pub response_code: DnsResponseCode,
+    pub qd_count: u16,
+    pub an_count: u16,
+    pub ns_count: u16,
+    pub ar_count: u16,
+}
+
+impl From<DnsHeader> for Vec<u8> {
+    fn from(header: DnsHeader) -> Self {
+        let mut raw_header = Vec::new();
+
+        raw_header.write_u16::<BigEndian>(header.id).unwrap();
+
+        let mut flags: u16 = 0;
+        flags |= (u16::from(DnsQr::Response as u16) << 15) & 0b1000000000000000;
+        flags |= (u16::from(u8::from(header.opcode)) << 11) & 0b0111100000000000;
+        flags |= ((header.authoritative_anser as u16) << 10) & 0b0000010000000000;
+        flags |= ((header.truncated as u16) << 9) & 0b0000001000000000;
+        flags |= ((header.recursion_desired as u16) << 8) & 0b0000000100000000;
+        flags |= ((header.recursion_available as u16) << 7) & 0b0000000010000000;
+        flags |= (u16::from(u8::from(header.response_code)) << 0) & 0b0000000000001111;
+        raw_header.write_u16::<BigEndian>(flags).unwrap();
+        raw_header.write_u16::<BigEndian>(header.qd_count).unwrap();
+        raw_header.write_u16::<BigEndian>(header.an_count).unwrap();
+        raw_header.write_u16::<BigEndian>(header.ns_count).unwrap();
+        raw_header.write_u16::<BigEndian>(header.ar_count).unwrap();
+
+        raw_header
+    }
+}
+
+impl From<DnsQuestion> for Vec<u8> {
+    fn from(question: DnsQuestion) -> Self {
+        let mut raw_question: Vec<u8> = question
+            .labels
+            .iter()
+            .flat_map(|x| {
+                let mut r = Bytes::from(vec![x.len() as u8]);
+                r.extend_from_slice(x.as_bytes());
+                r
+            })
+            .collect();
+        raw_question.push(0);
+
+        println!("raw_question: {:?}", raw_question);
+
+        raw_question
+            .write_u16::<BigEndian>(question.query_type.into())
+            .unwrap();
+        raw_question
+            .write_u16::<BigEndian>(question.query_class.into())
+            .unwrap();
+
+        raw_question
+    }
 }
 
 #[derive(Debug)]
-struct DnsQuestion {
-    labels: Vec<String>,
+pub struct DnsQuestion {
+    pub labels: Vec<String>,
     query_type: DnsType,
-    query_class: DnsClass
+    query_class: DnsClass,
 }
 
 #[derive(Debug, PartialEq)]
-enum DnsType {
+pub enum DnsType {
     A,
     NS,
     MX,
     SOA,
-    AAAA
+    AAAA,
 }
 
 impl From<u16> for DnsType {
     fn from(value: u16) -> Self {
+        println!("dns_type: {}", value);
         match value {
             1 => DnsType::A,
             2 => DnsType::NS,
@@ -148,7 +188,7 @@ impl From<u16> for DnsType {
             6 => DnsType::SOA,
             15 => DnsType::MX,
             28 => DnsType::AAAA,
-            _ => panic!("This should not occur :(")
+            _ => panic!("This should not occur :("),
         }
     }
 }
@@ -157,21 +197,20 @@ impl From<DnsType> for u16 {
     fn from(value: DnsType) -> u16 {
         match value {
             DnsType::A => 1,
-             DnsType::NS => 2,
-             DnsType::SOA => 6,
-             DnsType::MX => 15,
-             DnsType::AAAA => 28,
-            _ => panic!("This should not occur :(")
+            DnsType::NS => 2,
+            DnsType::SOA => 6,
+            DnsType::MX => 15,
+            DnsType::AAAA => 28,
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
-enum DnsClass {
+pub enum DnsClass {
     IN,
     CS,
     CH,
-    HS
+    HS,
 }
 
 impl From<u16> for DnsClass {
@@ -181,7 +220,7 @@ impl From<u16> for DnsClass {
             2 => DnsClass::CS,
             3 => DnsClass::CH,
             4 => DnsClass::HS,
-            _ => panic!("This should be an error :)")
+            _ => panic!("This should be an error :)"),
         }
     }
 }
@@ -193,279 +232,38 @@ impl From<DnsClass> for u16 {
             DnsClass::CS => 2,
             DnsClass::CH => 3,
             DnsClass::HS => 4,
-            _ => panic!("This should be an error :)")
         }
     }
 }
 
-impl DnsQuestion {
-    // fn from_packet(mut packet: &[u8]) -> Self {
-    //     let mut labels = Vec::with_capacity(10);
-
-    //     let mut length: usize =  packet.read_u8().unwrap() as usize;
-    //     while length > 0  {
-    //         labels.push(std::str::from_utf8(&packet[..length]).unwrap().to_string());
-    //         packet = &packet[length..];
-    //         length = packet.read_u8().unwrap() as usize;
-    //     }
-    //     let domain_name = labels.join(".");
-
-    //     let query_type = DnsType::from(packet.read_u16::<BigEndian>().unwrap());
-    //     let query_class = DnsClass::from(packet.read_u16::<BigEndian>().unwrap());
-    //     DnsQuestion {
-    //         domain_name,
-    //         query_type,
-    //         query_class
-    //     }
-    // }
+#[derive(Debug)]
+pub struct DnsStandardQuery {
+    pub header: DnsHeader,
+    pub question: DnsQuestion,
 }
 
-fn take_one_bit((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    let take_one = take::<_, u8, _, (_, _)>(1usize);
+impl DnsStandardQuery {
+    pub fn from_packet(input: &[u8]) -> Self {
+        let (input, header) = parser::dns_header(input).unwrap();
 
-    take_one((input, offset)) 
+        if header.qd_count != 1 {
+            panic!("More than one question in the DNS query.");
+        }
+
+        let (_, question) = parser::dns_question(input).unwrap();
+
+        DnsStandardQuery { header, question }
+    }
 }
 
-fn take_four_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    let take_one = take::<_, u8, _, (_, _)>(4usize);
-
-    take_one((input, offset)) 
+enum QueryMessage {
+    StandardQuery(DnsStandardQuery),
+    InverseQuery,
+    Status,
+    Reserved(u8),
 }
 
-fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
-    let take_three_bits = take::<_, u8, _, (_, _)>(3usize);
-
-    let parser = tuple((
-        be_u16,
-        bits(tuple((
-            take_one_bit,
-            take_four_bits,
-            take_one_bit,
-            take_one_bit,
-            take_one_bit,
-            take_one_bit,
-            take_three_bits,
-            take_four_bits
-        ))),
-        be_u16
-    ));
-
-    let (
-        input, (
-            id,
-            (qr, opcode, _, tc, rd, ra, _, rcode),
-            qd_count
-        )
-    ) = parser(input)?;
-
-    println!("{:?}", qr);
-
-    Ok((input, DnsHeader {
-        id,
-        opcode: opcode.into(),
-        authoritative_anser: false,
-        truncated: tc != 0,
-        recursion_desired: rd != 0,
-        recursion_available: ra != 0,
-        response_code: rcode.into(),
-        qd_count
-    }))
-}
-
-use nom::combinator::map;
-use nom::combinator::map_res;
-use nom::character::complete::alpha1;
-use nom::branch::alt;
-use nom::sequence::pair;
-use nom::character::complete;
-use nom::combinator::recognize;
-use nom::multi::separated_list;
-use nom::combinator::all_consuming;
-use nom::combinator::peek;
-use nom::character::complete::digit0;
-use nom::character::complete::alphanumeric0;
-use std::str;
-
-/// Implemented as described in [RFC 1035](https://tools.ietf.org/html/rfc1035#section-2.3.1)
-fn dns_label(input: &[u8]) -> IResult<&[u8], String> {
-    // TODO: add support for message compression as desribed in https://tools.ietf.org/html/rfc1035#section-4.1.4
-    let (rem, label) = map(
-        map_res(
-            length_value(
-                be_u8,
-                all_consuming(
-                    recognize(
-                        pair(
-                            peek(alpha1), // a label must start with an ASCII letter
-                            separated_list(complete::char('-'),
-                            alphanumeric1)
-                        )
-                    )
-                )
-            ),
-            str::from_utf8),
-        |s| { s.to_owned() }
-    )(input)?;
-
-    Ok((rem, label))
-}
-
-fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
-    let (rem, (labels, _)) = many_till(dns_label, tag("\0"))(input)?;
-
-    Ok((rem, labels))
-}
-
-fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
-    let parser = tuple((dns_labels, be_u16, be_u16));
-    
-    let (rem, (labels, qtype, qclass)) = parser(input)?;
-
-    Ok((rem, DnsQuestion {
-        labels,
-        query_type: qtype.into(),
-        query_class: qclass.into()
-    }))
-}
-
-
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn test_parse_id() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
-
-        let (_, header) = dns_header(raw_header).unwrap();
-        
-        println!("{:?}", header);
-
-        assert_eq!(header.id, 26355);
-        assert_eq!(header.opcode, DnsOpCode::StandardQuery);
-    }
-
-    #[test]
-    fn test_parse_opcode() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
-
-        let (_, header) = dns_header(raw_header).unwrap();
-        
-        assert_eq!(header.opcode, DnsOpCode::StandardQuery);
-    }
-
-    #[test]
-    fn test_parse_tc() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
-
-        let (_, header) = dns_header(raw_header).unwrap();
-        
-        assert_eq!(header.truncated, false);
-    }
-
-    #[test]
-    fn test_parse_rd() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
-
-        let (_, header) = dns_header(raw_header).unwrap();
-        
-        assert_eq!(header.recursion_desired, true);
-    }
-
-
-    #[test]
-    fn test_parse_ra() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
-
-        let (_, header) = dns_header(raw_header).unwrap();
-        
-        assert_eq!(header.recursion_available, false);
-    }
-
-    #[test]
-    fn test_parse_rcode() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
-
-        let (_, header) = dns_header(raw_header).unwrap();
-        
-        assert_eq!(header.response_code, DnsResponseCode::NoError);
-    }
-
-    #[test]
-    fn test_parse_qd_count() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
-
-        let (_, header) = dns_header(raw_header).unwrap();
-        
-        assert_eq!(header.qd_count, 1);
-    }
-
-
-    #[test]
-    fn test_parse_hyphen_label() {
-        let raw_header = b"\x0Btest-hyphen";
-
-        let (_, label) = dns_label(raw_header).unwrap();
-
-        assert_eq!(label, String::from("test-hyphen"));
-    }
-
-    // #[test]
-    // fn test_parse_leading_digit_label() {
-    //     let raw_header = b"\x050test";
-
-    //     let (_, label) = dns_label(raw_header).unwrap();
-
-    //     assert_eq!(label, String::from("0test"));
-    // }
-
-    // #[test]
-    // fn test_parse_leading_hyphen_label() {
-    //     let raw_header = b"\x05-test";
-
-    //     let (_, label) = dns_label(raw_header).unwrap();
-
-    //     assert_eq!(label, String::from(""));
-    // }
-
-    // #[test]
-    // fn test_parse_tailing_hyphen_label() {
-    //     let raw_header = b"\x05test-";
-
-    //     let (_, label) = dns_label(raw_header).unwrap();
-
-    //     assert_eq!(label, String::from(""));
-    // }
-
-    #[test]
-    fn test_parse_alphabetic_label() {
-        let raw_header = b"\x04test";
-
-        let (_, label) = dns_label(raw_header).unwrap();
-
-        assert_eq!(label, String::from("test"));
-    }
-
-    #[test]
-    fn test_parse_labels() {
-        let raw_labels = b"\x04\x74\x65\x73\x74\x03\x64\x79\x6e\x07\x65\x78\x61\x6d\x70\x6c\x65\x03\x63\x6f\x6d\x00";
-
-        let (_, labels) = dns_labels(raw_labels).unwrap();
-
-        assert_eq!(labels[0], String::from("test"));
-        assert_eq!(labels[1], String::from("dyn"));
-    }
-
-    #[test]
-    fn test_parse_question() {
-        let raw_question = b"\x04\x74\x65\x73\x74\x03\x64\x79\x6e\x07\x65\x78\x61\x6d\x70\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01";
-
-        let(_, question) = dns_question(raw_question).unwrap();
-        println!("{:?}", question);
-        
-        assert_eq!(question.labels[0], String::from("test"));
-        assert_eq!(question.query_type, DnsType::A);
-        assert_eq!(question.query_class, DnsClass::IN);
-    }
+enum Message {
+    Query(QueryMessage),
+    Response(QueryMessage),
 }
