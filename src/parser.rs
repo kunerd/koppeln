@@ -1,3 +1,6 @@
+use crate::QueryMessage;
+use crate::DnsOpCode;
+use crate::DnsStandardQuery;
 use std::str;
 
 use nom::{
@@ -92,7 +95,7 @@ fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
     Ok((rem, labels))
 }
 
-pub fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
+fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
     let parser = tuple((dns_labels, be_u16, be_u16));
     let (rem, (labels, qtype, qclass)) = parser(input)?;
 
@@ -106,6 +109,24 @@ pub fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
     ))
 }
 
+
+pub fn dns_query(input: &[u8]) -> IResult<&[u8], QueryMessage> {
+    let (input, header) = dns_header(input)?;
+
+    let (input, query) = match header.opcode {
+        DnsOpCode::StandardQuery => {
+            let (input, question) = dns_question(input)?;
+            (input, QueryMessage::StandardQuery( DnsStandardQuery{ header, question } ))
+        },
+        // TODO parse these formats too
+        DnsOpCode::InversQuery => (input, QueryMessage::InverseQuery),
+        DnsOpCode::ServerStatusRequest => (input, QueryMessage::Status),
+        DnsOpCode::Reserved(value) => (input, QueryMessage::Reserved(value))
+    };
+
+    Ok((input, query))
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -116,8 +137,7 @@ mod tests {
     fn test_parse_id() {
         let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
 
-        let (input, header) = dns_header(raw_header).unwrap();
-        println!("{:?}", input);
+        let (_, header) = dns_header(raw_header).unwrap();
 
         assert_eq!(header.id, 26355);
         assert_eq!(header.opcode, DnsOpCode::StandardQuery);
@@ -240,7 +260,7 @@ mod tests {
     fn test_parse_standard_query() {
         let raw_data = b"\xf4\x4c\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x04\x74\x65\x73\x74\x03\x64\x79\x6e\x07\x65\x78\x61\x6d\x70\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01";
 
-        let (input, header) = dns_header(raw_data).unwrap();
-        let (_, question) = dns_question(input).unwrap();
+        let (input, _) = dns_header(raw_data).unwrap();
+        let (_, _) = dns_question(input).unwrap();
     }
 }

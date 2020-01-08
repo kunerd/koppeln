@@ -3,6 +3,7 @@ mod parser;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
+use std::net::Ipv4Addr;
 
 #[derive(Debug)]
 pub enum DnsQr {
@@ -148,8 +149,6 @@ impl From<DnsQuestion> for Vec<u8> {
             .collect();
         raw_question.push(0);
 
-        println!("raw_question: {:?}", raw_question);
-
         raw_question
             .write_u16::<BigEndian>(question.query_type.into())
             .unwrap();
@@ -179,7 +178,6 @@ pub enum DnsType {
 
 impl From<u16> for DnsType {
     fn from(value: u16) -> Self {
-        println!("dns_type: {}", value);
         match value {
             1 => DnsType::A,
             2 => DnsType::NS,
@@ -237,33 +235,127 @@ impl From<DnsClass> for u16 {
 }
 
 #[derive(Debug)]
+struct LabelPointer {
+    offset: u16
+}
+
+#[derive(Debug)]
+pub struct Name {
+    labels: Option<Vec<String>>,
+    pointer: Option<LabelPointer>
+}
+
+impl Name {
+    pub fn with_pointer(offset: u16) -> Self {
+        Name {
+            labels: None,
+            pointer: Some( LabelPointer{ offset } )
+        }
+    }
+}
+
+impl From<Name> for Vec<u8> {
+    fn from(name: Name) -> Self {
+        let mut raw_name: Vec<u8> = Vec::new();
+
+        // FIXME get rid of case where both, labels and pointer, are None
+        if let Some(labels) = name.labels {
+            let mut raw_labels: Vec<u8> = labels
+                    .iter()
+                    .flat_map(|x| {
+                        let mut r = Bytes::from(vec![x.len() as u8]);
+                        r.extend_from_slice(x.as_bytes());
+                        r
+                    })
+                    .collect();
+            raw_name.append(&mut raw_labels);
+        }
+
+        if let Some(pointer) = name.pointer {
+            raw_name
+                .write_u16::<BigEndian>(0b1100000000000000 | pointer.offset)
+                .unwrap();
+        }
+
+        raw_name
+    }
+
+}
+
+#[derive(Debug)]
+pub struct DnsResourceRecord {
+    pub name: Name,
+    pub data_type: DnsType,
+    pub data_class: DnsClass,
+    pub ttl: u32,
+    pub resource_data_length: u16,
+    // TODO: this depends on type and class, maybe it can be implemented as an enum
+    pub resource_data: Ipv4Addr,
+}
+
+impl From<DnsResourceRecord> for Vec<u8> {
+    fn from(rr: DnsResourceRecord) -> Self {
+        let mut raw_rr = Vec::new();
+        raw_rr.append(&mut rr.name.into());
+        raw_rr.write_u16::<BigEndian>(rr.data_type.into()).unwrap();
+        raw_rr.write_u16::<BigEndian>(rr.data_class.into()).unwrap();
+        raw_rr.write_u32::<BigEndian>(rr.ttl).unwrap();
+        raw_rr
+            .write_u16::<BigEndian>(rr.resource_data_length)
+            .unwrap();
+        //raw_rr.write_u16::<BigEndian>(1).unwrap();
+        raw_rr
+            .write_u32::<BigEndian>(rr.resource_data.into())
+            .unwrap();
+
+        raw_rr
+    }
+}
+
+#[derive(Debug)]
 pub struct DnsStandardQuery {
     pub header: DnsHeader,
     pub question: DnsQuestion,
 }
 
-impl DnsStandardQuery {
-    pub fn from_packet(input: &[u8]) -> Self {
-        let (input, header) = parser::dns_header(input).unwrap();
-
-        if header.qd_count != 1 {
-            panic!("More than one question in the DNS query.");
-        }
-
-        let (_, question) = parser::dns_question(input).unwrap();
-
-        DnsStandardQuery { header, question }
-    }
-}
-
-enum QueryMessage {
+#[derive(Debug)]
+pub enum QueryMessage {
     StandardQuery(DnsStandardQuery),
     InverseQuery,
     Status,
     Reserved(u8),
 }
 
-enum Message {
-    Query(QueryMessage),
-    Response(QueryMessage),
+pub struct ResponseMessage {
+    pub header: DnsHeader,
+    pub question: DnsQuestion,
+    pub answer: Vec<DnsResourceRecord>,
+    // authority: Vec<DnsResourceRecord>,
+    // additional: Vec<DnsResourceRecord>
+}
+
+impl ResponseMessage {
+    pub fn as_u8(self) -> Vec<u8> {
+        let mut raw_message: Vec<u8> = self.header.into();
+        let mut raw_question: Vec<u8> = self.question.into();
+
+        raw_message.append(&mut raw_question);
+
+        for rr in self.answer {
+            let mut raw_resource_record: Vec<u8> = rr.into();
+
+            raw_message.append(&mut raw_resource_record);
+        }
+
+        raw_message
+    }
+}
+
+impl QueryMessage {
+    pub fn from_u8(input: &[u8]) -> Self {
+        // FIXME remove unwrap
+        let (_, query) = parser::dns_query(input).unwrap();
+
+        query
+    }
 }

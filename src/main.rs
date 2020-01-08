@@ -1,14 +1,14 @@
 extern crate dns;
 
+use dns::DnsStandardQuery;
+use dns::ResponseMessage;
+use std::str::FromStr;
 use std::io::ErrorKind;
 use std::net::{Ipv4Addr, UdpSocket};
-use std::str::FromStr;
 
 use std::convert::From;
 
-use byteorder::{BigEndian, WriteBytesExt};
-
-use dns::{DnsClass, DnsHeader, DnsResponseCode, DnsStandardQuery, DnsType};
+use dns::{DnsClass, Name, DnsResourceRecord, DnsHeader, DnsResponseCode, QueryMessage, DnsType};
 
 fn main() {
     let sock = UdpSocket::bind("0.0.0.0:5546").expect("Failed to bind socket");
@@ -42,82 +42,60 @@ fn main() {
     }
 }
 
-struct DnsResourceRecord {
-    //name: Vec<String>,
-    data_type: DnsType,
-    data_class: DnsClass,
-    ttl: u32,
-    resource_data_length: u16,
-    // TODO: this depends on type and class, maybe it can be implemented as an enum
-    resource_data: Ipv4Addr,
-}
-
-impl From<DnsResourceRecord> for Vec<u8> {
-    fn from(rr: DnsResourceRecord) -> Self {
-        let mut raw_rr = Vec::new();
-
-        raw_rr
-            .write_u16::<BigEndian>(0b1100000000000000 | 12)
-            .unwrap();
-        raw_rr.write_u16::<BigEndian>(rr.data_type.into()).unwrap();
-        raw_rr.write_u16::<BigEndian>(rr.data_class.into()).unwrap();
-        raw_rr.write_u32::<BigEndian>(rr.ttl).unwrap();
-        raw_rr
-            .write_u16::<BigEndian>(rr.resource_data_length)
-            .unwrap();
-        // answer_packet.write_u16::<BigEndian>(1).unwrap();
-        raw_rr
-            .write_u32::<BigEndian>(rr.resource_data.into())
-            .unwrap();
-
-        raw_rr
-    }
-}
-
-fn handle_dns_request(packet: &[u8]) -> Vec<u8> {
-    let query = DnsStandardQuery::from_packet(packet);
-
+fn handle_standard_query(query: DnsStandardQuery) -> ResponseMessage {
+    // TODO: load from Zone file
     let domain_name: Vec<String> = vec!["test", "dyn", "example", "com"]
         .iter()
         .map(|ref s| s.to_string())
         .collect::<Vec<String>>();
 
-    let rr = if query.question.labels == domain_name {
-        let ip = Ipv4Addr::from_str("192.1.2.3").unwrap();
-        DnsResourceRecord {
-            data_type: DnsType::A,
-            data_class: DnsClass::IN,
-            ttl: 15,
-            resource_data_length: 4,
-            resource_data: ip,
-        }
-    } else {
-        // This should return an error: not found
-        DnsResourceRecord {
-            data_type: DnsType::A,
-            data_class: DnsClass::IN,
-            ttl: 15,
-            resource_data_length: 4,
-            resource_data: Ipv4Addr::from_str("127.0.0.1").unwrap(),
-        }
-    };
+    // TODO lookup resource records from internal database
 
-    let answer_header = DnsHeader {
+    let mut header = DnsHeader {
         //qr: DnsQr::Respons,
         authoritative_anser: true,
         truncated: false,
         recursion_available: false,
-        an_count: 1, // FIXME needs to be genric, e.g. the number of resource records
+        an_count: 0,
         response_code: DnsResponseCode::NoError,
         ..query.header
     };
 
-    let mut raw_message: Vec<u8> = answer_header.into();
-    let mut raw_question: Vec<u8> = query.question.into();
-    let mut raw_resource_record: Vec<u8> = rr.into();
+    if query.question.labels == domain_name {
+        let ip = Ipv4Addr::from_str("192.1.2.3").unwrap();
+        header.an_count = 1;
+        ResponseMessage {
+            header: header,
+            question: query.question,
+            answer: vec![
+                DnsResourceRecord {
+                    name: Name::with_pointer(11),
+                    data_type: DnsType::A,
+                    data_class: DnsClass::IN,
+                    ttl: 15,
+                    resource_data_length: 4,
+                    resource_data: ip,
+                }]
+        }
 
-    raw_message.append(&mut raw_question);
-    raw_message.append(&mut raw_resource_record);
+    } else {
+        header.response_code = DnsResponseCode::NameError;
+        ResponseMessage {
+            header: header,
+            question: query.question,
+            answer: vec![]
+        }
+    }
+}
 
-    raw_message
+fn handle_dns_request(packet: &[u8]) -> Vec<u8> {
+    let query = QueryMessage::from_u8(packet);
+
+    let response = match query {
+        QueryMessage::StandardQuery(query) => handle_standard_query(query),
+        // FIXME response with not implemented error
+        _ => panic!("Not Implemented") // TODO: not implemented response
+    };
+
+    response.as_u8()
 }
