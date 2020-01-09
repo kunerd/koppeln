@@ -1,16 +1,22 @@
 extern crate dns;
 
-use dns::DnsStandardQuery;
-use dns::ResponseMessage;
-use std::str::FromStr;
+use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::net::{Ipv4Addr, UdpSocket};
 
 use std::convert::From;
 
-use dns::{DnsClass, Name, DnsResourceRecord, DnsHeader, DnsResponseCode, QueryMessage, DnsType};
+use dns::DnsStandardQuery;
+use dns::ResponseMessage;
+use dns::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage};
 
 fn main() {
+    let mut records = HashMap::new();
+    // TODO load this from config file or set via REST interface
+    records.insert(
+        "example.com".to_string(),
+        Ipv4Addr::new(127,0,0,2));
+
     let sock = UdpSocket::bind("0.0.0.0:5546").expect("Failed to bind socket");
     // sock.set_nonblocking(true)
     //     .expect("Failed to enter non-blocking mode");
@@ -23,11 +29,17 @@ fn main() {
         match result {
             Ok((num_bytes, src)) => {
                 // if packet is shorter than the header the packet is invalid
+                // move this check into parser
                 if num_bytes < 12 {
                     continue;
                 }
-                let answer = handle_dns_request(&buf);
-                let answer = bytes::BytesMut::from(answer);
+                let query = QueryMessage::from_u8(&buf);
+                let response = match query {
+                    QueryMessage::StandardQuery(query) => handle_standard_query(&records, query),
+                    // FIXME response with not implemented error
+                    _ => panic!("Not Implemented"), // TODO: not implemented response
+                };
+                let answer = bytes::BytesMut::from(response.as_u8());
                 sock.send_to(answer.as_ref(), src).unwrap();
             }
             // If we get an error other than "would block", print the error.
@@ -35,21 +47,13 @@ fn main() {
                 println!("Something went wrong: {}", err)
             }
             // Do nothing otherwise.
-            _ => {}
+            Err(_) => {}
         }
-
-        // thread::sleep(Duration::from_millis(5));
     }
 }
 
-fn handle_standard_query(query: DnsStandardQuery) -> ResponseMessage {
-    // TODO: load from Zone file
-    let domain_name: Vec<String> = vec!["test", "dyn", "example", "com"]
-        .iter()
-        .map(|ref s| s.to_string())
-        .collect::<Vec<String>>();
-
-    // TODO lookup resource records from internal database
+fn handle_standard_query(records: &HashMap<String, Ipv4Addr>, query: DnsStandardQuery) -> ResponseMessage {
+    let record = records.get(&query.question.name);
 
     let mut header = DnsHeader {
         //qr: DnsQr::Respons,
@@ -61,41 +65,26 @@ fn handle_standard_query(query: DnsStandardQuery) -> ResponseMessage {
         ..query.header
     };
 
-    if query.question.labels == domain_name {
-        let ip = Ipv4Addr::from_str("192.1.2.3").unwrap();
+    if let Some(ip) = record {
         header.an_count = 1;
         ResponseMessage {
             header: header,
             question: query.question,
-            answer: vec![
-                DnsResourceRecord {
-                    name: Name::with_pointer(11),
-                    data_type: DnsType::A,
-                    data_class: DnsClass::IN,
-                    ttl: 15,
-                    resource_data_length: 4,
-                    resource_data: ip,
-                }]
+            answer: vec![DnsResourceRecord {
+                name: Name::with_pointer(11),
+                data_type: DnsType::A,
+                data_class: DnsClass::IN,
+                ttl: 15,
+                resource_data_length: 4,
+                resource_data: *ip,
+            }],
         }
-
     } else {
         header.response_code = DnsResponseCode::NameError;
         ResponseMessage {
             header: header,
             question: query.question,
-            answer: vec![]
+            answer: vec![],
         }
     }
-}
-
-fn handle_dns_request(packet: &[u8]) -> Vec<u8> {
-    let query = QueryMessage::from_u8(packet);
-
-    let response = match query {
-        QueryMessage::StandardQuery(query) => handle_standard_query(query),
-        // FIXME response with not implemented error
-        _ => panic!("Not Implemented") // TODO: not implemented response
-    };
-
-    response.as_u8()
 }

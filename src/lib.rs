@@ -163,6 +163,7 @@ impl From<DnsQuestion> for Vec<u8> {
 #[derive(Debug)]
 pub struct DnsQuestion {
     pub labels: Vec<String>,
+    pub name: String,
     query_type: DnsType,
     query_class: DnsClass,
 }

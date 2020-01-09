@@ -98,11 +98,13 @@ fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
 fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
     let parser = tuple((dns_labels, be_u16, be_u16));
     let (rem, (labels, qtype, qclass)) = parser(input)?;
+    let name = labels.join(".");
 
     Ok((
         rem,
         DnsQuestion {
             labels,
+            name,
             query_type: qtype.into(),
             query_class: qclass.into(),
         },
