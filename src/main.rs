@@ -4,8 +4,6 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::net::{Ipv4Addr, UdpSocket};
 
-use std::convert::From;
-
 use dns::DnsStandardQuery;
 use dns::ResponseMessage;
 use dns::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage};
@@ -13,9 +11,7 @@ use dns::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name
 fn main() {
     let mut records = HashMap::new();
     // TODO load this from config file or set via REST interface
-    records.insert(
-        "example.com".to_string(),
-        Ipv4Addr::new(127,0,0,2));
+    records.insert("example.com".to_string(), Ipv4Addr::new(127, 0, 0, 2));
 
     let sock = UdpSocket::bind("0.0.0.0:5546").expect("Failed to bind socket");
     // sock.set_nonblocking(true)
@@ -39,7 +35,7 @@ fn main() {
                     // FIXME response with not implemented error
                     _ => panic!("Not Implemented"), // TODO: not implemented response
                 };
-                let answer = bytes::BytesMut::from(response.as_u8());
+                let answer = response.as_u8();
                 sock.send_to(answer.as_ref(), src).unwrap();
             }
             // If we get an error other than "would block", print the error.
@@ -52,7 +48,10 @@ fn main() {
     }
 }
 
-fn handle_standard_query(records: &HashMap<String, Ipv4Addr>, query: DnsStandardQuery) -> ResponseMessage {
+fn handle_standard_query(
+    records: &HashMap<String, Ipv4Addr>,
+    query: DnsStandardQuery,
+) -> ResponseMessage {
     let record = records.get(&query.question.name);
 
     let mut header = DnsHeader {

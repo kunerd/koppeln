@@ -1,8 +1,12 @@
 extern crate nom;
+extern crate toml;
+extern crate serde;
+
+mod config;
 mod parser;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::Bytes;
+use bytes::{Bytes, BufMut};
 use std::net::Ipv4Addr;
 
 #[derive(Debug)]
@@ -142,8 +146,8 @@ impl From<DnsQuestion> for Vec<u8> {
             .labels
             .iter()
             .flat_map(|x| {
-                let mut r = Bytes::from(vec![x.len() as u8]);
-                r.extend_from_slice(x.as_bytes());
+                let mut r = vec![x.len() as u8];
+                r.put(x.as_bytes());
                 r
             })
             .collect();
@@ -264,8 +268,8 @@ impl From<Name> for Vec<u8> {
             let mut raw_labels: Vec<u8> = labels
                     .iter()
                     .flat_map(|x| {
-                        let mut r = Bytes::from(vec![x.len() as u8]);
-                        r.extend_from_slice(x.as_bytes());
+                        let mut r = vec![x.len() as u8];
+                        r.put(x.as_bytes());
                         r
                     })
                     .collect();
