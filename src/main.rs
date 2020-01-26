@@ -1,15 +1,21 @@
+#[macro_use]
+extern crate log;
 extern crate dns;
 
 use std::collections::HashMap;
 use std::io::ErrorKind;
-use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 
 use dns::settings::Settings;
 use dns::DnsStandardQuery;
 use dns::ResponseMessage;
 use dns::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage};
 
+use env_logger::Env;
+
 fn main() {
+    env_logger::from_env(Env::default().default_filter_or("info")).init();
+
     let mut records = HashMap::new();
     // TODO load this from config file or set via REST interface
     records.insert("example.com".to_string(), Ipv4Addr::new(127, 0, 0, 2));
@@ -17,6 +23,11 @@ fn main() {
     let settings = Settings::load().expect("Could not load settings.");
     let addr = SocketAddr::from(([0, 0, 0, 0], settings.general.dns_port));
     let sock = UdpSocket::bind(addr).expect("Could not bind socket.");
+
+    info!(
+        "DNS server now listening on UDP port: {}",
+        settings.general.dns_port
+    );
     // sock.set_nonblocking(true)
     //     .expect("Failed to enter non-blocking mode");
 
