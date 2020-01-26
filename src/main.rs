@@ -2,8 +2,9 @@ extern crate dns;
 
 use std::collections::HashMap;
 use std::io::ErrorKind;
-use std::net::{Ipv4Addr, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
 
+use dns::settings::Settings;
 use dns::DnsStandardQuery;
 use dns::ResponseMessage;
 use dns::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage};
@@ -13,7 +14,9 @@ fn main() {
     // TODO load this from config file or set via REST interface
     records.insert("example.com".to_string(), Ipv4Addr::new(127, 0, 0, 2));
 
-    let sock = UdpSocket::bind("0.0.0.0:5546").expect("Failed to bind socket");
+    let settings = Settings::load().expect("Could not load settings.");
+    let addr = SocketAddr::from(([0, 0, 0, 0], settings.general.dns_port));
+    let sock = UdpSocket::bind(addr).expect("Could not bind socket.");
     // sock.set_nonblocking(true)
     //     .expect("Failed to enter non-blocking mode");
 
@@ -35,6 +38,7 @@ fn main() {
                     // FIXME response with not implemented error
                     _ => panic!("Not Implemented"), // TODO: not implemented response
                 };
+                print!("{:?}", response);
                 let answer = response.as_u8();
                 sock.send_to(answer.as_ref(), src).unwrap();
             }

@@ -1,12 +1,12 @@
+extern crate config;
 extern crate nom;
-extern crate toml;
 extern crate serde;
+extern crate toml;
 
-mod config;
 mod parser;
+pub mod settings;
 
-use byteorder::{BigEndian, WriteBytesExt};
-use bytes::{Bytes, BufMut};
+use bytes::BufMut;
 use std::net::Ipv4Addr;
 
 #[derive(Debug)]
@@ -118,9 +118,9 @@ pub struct DnsHeader {
 
 impl From<DnsHeader> for Vec<u8> {
     fn from(header: DnsHeader) -> Self {
-        let mut raw_header = Vec::new();
+        let mut raw_header = vec![];
 
-        raw_header.write_u16::<BigEndian>(header.id).unwrap();
+        raw_header.put_u16(header.id);
 
         let mut flags: u16 = 0;
         flags |= (u16::from(DnsQr::Response as u16) << 15) & 0b1000000000000000;
@@ -130,11 +130,11 @@ impl From<DnsHeader> for Vec<u8> {
         flags |= ((header.recursion_desired as u16) << 8) & 0b0000000100000000;
         flags |= ((header.recursion_available as u16) << 7) & 0b0000000010000000;
         flags |= (u16::from(u8::from(header.response_code)) << 0) & 0b0000000000001111;
-        raw_header.write_u16::<BigEndian>(flags).unwrap();
-        raw_header.write_u16::<BigEndian>(header.qd_count).unwrap();
-        raw_header.write_u16::<BigEndian>(header.an_count).unwrap();
-        raw_header.write_u16::<BigEndian>(header.ns_count).unwrap();
-        raw_header.write_u16::<BigEndian>(header.ar_count).unwrap();
+        raw_header.put_u16(flags);
+        raw_header.put_u16(header.qd_count);
+        raw_header.put_u16(header.an_count);
+        raw_header.put_u16(header.ns_count);
+        raw_header.put_u16(header.ar_count);
 
         raw_header
     }
@@ -142,7 +142,7 @@ impl From<DnsHeader> for Vec<u8> {
 
 impl From<DnsQuestion> for Vec<u8> {
     fn from(question: DnsQuestion) -> Self {
-        let mut raw_question: Vec<u8> = question
+        let mut raw: Vec<u8> = question
             .labels
             .iter()
             .flat_map(|x| {
@@ -151,16 +151,13 @@ impl From<DnsQuestion> for Vec<u8> {
                 r
             })
             .collect();
-        raw_question.push(0);
 
-        raw_question
-            .write_u16::<BigEndian>(question.query_type.into())
-            .unwrap();
-        raw_question
-            .write_u16::<BigEndian>(question.query_class.into())
-            .unwrap();
+        raw.put_u8(0);
 
-        raw_question
+        raw.put_u16(question.query_type.into());
+        raw.put_u16(question.query_class.into());
+
+        raw
     }
 }
 
@@ -241,20 +238,20 @@ impl From<DnsClass> for u16 {
 
 #[derive(Debug)]
 struct LabelPointer {
-    offset: u16
+    offset: u16,
 }
 
 #[derive(Debug)]
 pub struct Name {
     labels: Option<Vec<String>>,
-    pointer: Option<LabelPointer>
+    pointer: Option<LabelPointer>,
 }
 
 impl Name {
     pub fn with_pointer(offset: u16) -> Self {
         Name {
             labels: None,
-            pointer: Some( LabelPointer{ offset } )
+            pointer: Some(LabelPointer { offset }),
         }
     }
 }
@@ -266,25 +263,22 @@ impl From<Name> for Vec<u8> {
         // FIXME get rid of case where both, labels and pointer, are None
         if let Some(labels) = name.labels {
             let mut raw_labels: Vec<u8> = labels
-                    .iter()
-                    .flat_map(|x| {
-                        let mut r = vec![x.len() as u8];
-                        r.put(x.as_bytes());
-                        r
-                    })
-                    .collect();
+                .iter()
+                .flat_map(|x| {
+                    let mut r = vec![x.len() as u8];
+                    r.put(x.as_bytes());
+                    r
+                })
+                .collect();
             raw_name.append(&mut raw_labels);
         }
 
         if let Some(pointer) = name.pointer {
-            raw_name
-                .write_u16::<BigEndian>(0b1100000000000000 | pointer.offset)
-                .unwrap();
+            raw_name.put_u16(0b1100000000000000 | pointer.offset);
         }
 
         raw_name
     }
-
 }
 
 #[derive(Debug)]
@@ -302,16 +296,11 @@ impl From<DnsResourceRecord> for Vec<u8> {
     fn from(rr: DnsResourceRecord) -> Self {
         let mut raw_rr = Vec::new();
         raw_rr.append(&mut rr.name.into());
-        raw_rr.write_u16::<BigEndian>(rr.data_type.into()).unwrap();
-        raw_rr.write_u16::<BigEndian>(rr.data_class.into()).unwrap();
-        raw_rr.write_u32::<BigEndian>(rr.ttl).unwrap();
-        raw_rr
-            .write_u16::<BigEndian>(rr.resource_data_length)
-            .unwrap();
-        //raw_rr.write_u16::<BigEndian>(1).unwrap();
-        raw_rr
-            .write_u32::<BigEndian>(rr.resource_data.into())
-            .unwrap();
+        raw_rr.put_u16(rr.data_type.into());
+        raw_rr.put_u16(rr.data_class.into());
+        raw_rr.put_u32(rr.ttl);
+        raw_rr.put_u16(rr.resource_data_length);
+        raw_rr.put_u32(rr.resource_data.into());
 
         raw_rr
     }
@@ -331,6 +320,7 @@ pub enum QueryMessage {
     Reserved(u8),
 }
 
+#[derive(Debug)]
 pub struct ResponseMessage {
     pub header: DnsHeader,
     pub question: DnsQuestion,

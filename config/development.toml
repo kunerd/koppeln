@@ -1,0 +1,3 @@
+[general]
+dns_port = 5354
+web_port = 8088
