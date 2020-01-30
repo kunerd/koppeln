@@ -1,13 +1,20 @@
 extern crate config;
 extern crate nom;
 extern crate serde;
+extern crate tokio;
+extern crate tokio_util;
 extern crate toml;
 
 mod parser;
 pub mod settings;
+pub mod web;
 
-use bytes::BufMut;
+use bytes::{BufMut, BytesMut};
+use std::io;
 use std::net::Ipv4Addr;
+
+use tokio_util::codec::Decoder;
+use tokio_util::codec::Encoder;
 
 #[derive(Debug)]
 pub enum DnsQr {
@@ -352,5 +359,48 @@ impl QueryMessage {
         let (_, query) = parser::dns_query(input).unwrap();
 
         query
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+pub struct DnsMessageCodec(());
+
+impl DnsMessageCodec {
+    /// Creates a new `BytesCodec` for shipping around raw bytes.
+    pub fn new() -> Self {
+        DnsMessageCodec(())
+    }
+}
+
+impl Decoder for DnsMessageCodec {
+    type Item = QueryMessage;
+    type Error = io::Error;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
+        if !buf.is_empty() {
+            let len = buf.len();
+            // if packet is shorter than the header the packet is invalid
+            // move this check into parser
+            if len < 12 {
+                return Err(io::Error::from(io::ErrorKind::Other));
+            }
+
+            let query = QueryMessage::from_u8(&buf);
+            Ok(Some(query))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl Encoder for DnsMessageCodec {
+    type Item = ResponseMessage;
+    type Error = io::Error;
+
+    fn encode(&mut self, data: ResponseMessage, buf: &mut BytesMut) -> Result<(), io::Error> {
+        let raw_data = data.as_u8();
+        buf.reserve(raw_data.len());
+        buf.put(raw_data.as_ref());
+        Ok(())
     }
 }

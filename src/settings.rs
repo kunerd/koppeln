@@ -1,4 +1,6 @@
+use std::collections;
 use std::env;
+use std::net;
 
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
@@ -7,6 +9,16 @@ use serde::{Deserialize, Serialize};
 pub struct General {
     pub dns_port: u16,
     pub web_port: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct Address {
+    #[serde(skip)]
+    pub ipv4: Option<net::Ipv4Addr>,
+    #[serde(skip)]
+    pub ipv6: Option<net::Ipv6Addr>,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 impl Default for General {
@@ -22,6 +34,7 @@ impl Default for General {
 #[serde(default)]
 pub struct Settings {
     pub general: General,
+    pub addresses: collections::HashMap<String, Address>,
 }
 
 impl Settings {

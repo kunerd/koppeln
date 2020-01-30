@@ -21,6 +21,7 @@ pub fn write_config_at(path: &Path, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
+#[ignore]
 #[test]
 pub fn default_settings() {
     env::set_var("RUN_MODE", "nothing");
@@ -30,6 +31,7 @@ pub fn default_settings() {
     assert_eq!(s.general.dns_port, 5353);
 }
 
+#[ignore]
 #[test]
 fn load_production_settings_from_env_file() {
     env::set_var("RUN_MODE", "production");
@@ -46,4 +48,29 @@ fn load_development_settings_by_default() {
 
     assert_eq!(s.general.web_port, 8088);
     assert_eq!(s.general.dns_port, 5354);
+}
+
+#[test]
+fn load_addresses() {
+    env::remove_var("RUN_MODE");
+    let s = settings::Settings::load().unwrap();
+
+    assert_eq!(
+        *s.addresses.get("vpn.dyn.example.com").unwrap(),
+        settings::Address {
+            ipv4: None,
+            ipv6: None,
+            username: Some("kunerd".to_string()),
+            password: Some("super_secure".to_string())
+        }
+    );
+    assert_eq!(
+        *s.addresses.get("test.dyn.example.com").unwrap(),
+        settings::Address {
+            ipv4: None,
+            ipv6: None,
+            username: Some("kunerd".to_string()),
+            password: None
+        }
+    );
 }
