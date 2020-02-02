@@ -10,11 +10,16 @@ pub mod settings;
 pub mod web;
 
 use bytes::{BufMut, BytesMut};
+use std::collections::HashMap;
 use std::io;
 use std::net::Ipv4Addr;
+use std::sync::Arc;
 
+use tokio::sync::Mutex;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Encoder;
+
+pub type AddressStorage = Arc<Mutex<HashMap<String, settings::Address>>>;
 
 #[derive(Debug)]
 pub enum DnsQr {
