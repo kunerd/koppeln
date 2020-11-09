@@ -1,4 +1,4 @@
-FROM rust:1.34.1-slim
+FROM rust:1.40.0-slim
 
 WORKDIR /usr/src/mini-dns
 

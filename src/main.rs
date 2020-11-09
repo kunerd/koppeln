@@ -6,7 +6,6 @@ extern crate tokio_util;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -16,7 +15,7 @@ use tokio::stream::StreamExt;
 use tokio_util::udp::UdpFramed;
 use futures::{FutureExt, SinkExt};
 
-use dns::settings::{Address, Settings};
+use dns::settings::{AddressConfig, Settings};
 use dns::web;
 use dns::DnsMessageCodec;
 use dns::DnsStandardQuery;
@@ -27,26 +26,30 @@ use dns::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name
 async fn main() {
     env_logger::from_env(Env::default().default_filter_or("info")).init();
 
-    let mut settings = Settings::load().expect("Could not load settings.");
-    settings.addresses.get_mut("vpn.dyn.example.com").unwrap().ipv4 = Some(Ipv4Addr::from([127, 10, 1, 0]));
+    let settings = Settings::load().expect("Could not load settings.");
     let storage = Arc::new(Mutex::new(settings.addresses));
     
-    let update_server = tokio::spawn(web::create_update_server(storage.clone()));
+    let web_server_address = SocketAddr::from((settings.web_address, settings.web_port));
+    let update_server = tokio::spawn(web::create_update_server(web_server_address, storage.clone()));
     info!(
-        "HTTP/S server now listening on port: {}",
-        settings.general.web_port
+        "HTTP server now listening on: {ip}:{port}",
+        ip = settings.web_address,
+        port = settings.web_port
     );
     
-    let addr = SocketAddr::from(([0, 0, 0, 0], settings.general.dns_port));
+    let addr = SocketAddr::from((settings.dns_address, settings.dns_port));
     let udp_socket = UdpSocket::bind(&addr).await.unwrap();
     let mut dns_stream = UdpFramed::new(udp_socket, DnsMessageCodec::new());
+
     info!(
-        "DNS server now listening on UDP port: {}",
-        settings.general.dns_port
+        "DNS server now listening on: {ip}:{port}",
+        ip = settings.dns_address,
+        port = settings.dns_port
     );
 
     let udp_server = tokio::spawn(async move {
         loop {
+            debug!("Waiting for DNS queries...");
             let (query, addr) = dns_stream.next().map(|e| e.unwrap()).await.unwrap();
             debug!("DNS query received: {:?}", query);
             let response = match query {
@@ -67,7 +70,7 @@ async fn main() {
 }
 
 fn handle_standard_query(
-    records: &HashMap<String, Address>,
+    records: &HashMap<String, AddressConfig>,
     query: DnsStandardQuery,
 ) -> ResponseMessage {
     let record = records.get(&query.question.name);
@@ -85,7 +88,7 @@ fn handle_standard_query(
     if let Some(address) = record {
         if let Some(ip) = address.ipv4 {
             header.an_count = 1;
-            ResponseMessage {
+            return ResponseMessage {
                 header: header,
                 question: query.question,
                 answer: vec![DnsResourceRecord {
@@ -96,21 +99,14 @@ fn handle_standard_query(
                     resource_data_length: 4,
                     resource_data: ip,
                 }],
-            }
-        } else {
-            header.response_code = DnsResponseCode::NameError;
-            ResponseMessage {
-                header: header,
-                question: query.question,
-                answer: vec![],
-            }
+            };
         }
-    } else {
-        header.response_code = DnsResponseCode::NameError;
-        ResponseMessage {
-            header: header,
-            question: query.question,
-            answer: vec![],
-        }
+    }
+
+    header.response_code = DnsResponseCode::NameError;
+    ResponseMessage {
+        header: header,
+        question: query.question,
+        answer: vec![],
     }
 }

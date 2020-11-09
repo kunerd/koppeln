@@ -4,6 +4,8 @@ extern crate serde;
 extern crate tokio;
 extern crate tokio_util;
 extern crate toml;
+#[macro_use]
+extern crate log;
 
 mod parser;
 pub mod settings;
@@ -19,7 +21,7 @@ use tokio::sync::Mutex;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Encoder;
 
-pub type AddressStorage = Arc<Mutex<HashMap<String, settings::Address>>>;
+pub type AddressStorage = Arc<Mutex<HashMap<String, settings::AddressConfig>>>;
 
 #[derive(Debug)]
 pub enum DnsQr {
@@ -371,7 +373,6 @@ impl QueryMessage {
 pub struct DnsMessageCodec(());
 
 impl DnsMessageCodec {
-    /// Creates a new `BytesCodec` for shipping around raw bytes.
     pub fn new() -> Self {
         DnsMessageCodec(())
     }
@@ -382,6 +383,7 @@ impl Decoder for DnsMessageCodec {
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
+        debug!("Unpacking DNS query.");
         if !buf.is_empty() {
             let len = buf.len();
             // if packet is shorter than the header the packet is invalid

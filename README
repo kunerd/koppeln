@@ -1,7 +1,7 @@
 # Docker 
 ## Build 
 ```
-ocker build -t mini-dns .
+docker build -t mini-dns .
 ```
 ## Run
 ```
@@ -14,3 +14,12 @@ docker run --rm \
     -it mini-dns \
     /bin/bash
 ```
+
+# TODO
+* handle signals
+* utility to create new DNS entries with hashed password storage
+* option to enable plain passwords (disabled by default)
+* add legacy update mode (see below) 
+* option to enable legacy update method (e.g. DynDns like) - disabled by
+  default
+  - with basic auth
