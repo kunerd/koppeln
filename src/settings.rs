@@ -41,10 +41,9 @@ impl Settings {
     pub fn load() -> Result<Self, ConfigError> {
         let mut c = Config::new();
 
-        c.merge(File::with_name("/etc/dyndns/config").required(false))?;
-
         let env = env::var("RUN_MODE").unwrap_or("development".into());
-        c.merge(File::with_name(&format!("config/{}", env)).required(true))?;
+        c.merge(File::with_name(&format!("/etc/dyndns/config/{}", env)).required(false))?;
+        c.merge(File::with_name(&format!("config/{}", env)).required(false))?;
 
         c.merge(Environment::with_prefix("dyndns"))?;
 

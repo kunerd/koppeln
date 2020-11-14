@@ -1,7 +1,7 @@
 [package]
-name = "dyndns"
+name = "koppeln"
 version = "0.1.0"
-authors = ["kunerd"]
+authors = ["Hendrik Kunert <>"]
 edition = "2018"
 
 [dependencies]
@@ -18,6 +18,14 @@ warp = "0.2"
 futures = "0.3"
 tokio-util = { version = "0.2.0", features = ["udp", "codec"] }
 
+[dev-dependencies]
+testcontainers = "0.11"
+spectral = "0.6.0"
+pretty_env_logger = "0.4"
+tempfile = "3.1"
+trust-dns-client = "0.19.6"
+hyper = "0.13.9"
+
 [lib]
-name = "dns"
+name = "koppeln"
 path = "src/lib.rs"

@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate log;
-extern crate dns;
+extern crate koppeln;
 extern crate tokio;
 extern crate tokio_util;
 
@@ -15,18 +15,20 @@ use tokio::stream::StreamExt;
 use tokio_util::udp::UdpFramed;
 use futures::{FutureExt, SinkExt};
 
-use dns::settings::{AddressConfig, Settings};
-use dns::web;
-use dns::DnsMessageCodec;
-use dns::DnsStandardQuery;
-use dns::ResponseMessage;
-use dns::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage};
+use koppeln::settings::{AddressConfig, Settings};
+use koppeln::web;
+use koppeln::DnsMessageCodec;
+use koppeln::DnsStandardQuery;
+use koppeln::ResponseMessage;
+use koppeln::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage};
 
 #[tokio::main]
 async fn main() {
     env_logger::from_env(Env::default().default_filter_or("info")).init();
 
     let settings = Settings::load().expect("Could not load settings.");
+    debug!("Settings:\n{:?}", settings);
+
     let storage = Arc::new(Mutex::new(settings.addresses));
     
     let web_server_address = SocketAddr::from((settings.web_address, settings.web_port));

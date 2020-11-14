@@ -4,8 +4,4 @@ dns_port = 5354
 web_port = 8088
 
 [addresses]
-"vpn.dyn.example.com" = { token = "super_secure" }
-
-[addresses."test.dyn.example.com"]
-# The ip should not be loaded.
-token = "super_secure"
+"test.dyn.example.com" = { token = "super_secure" }

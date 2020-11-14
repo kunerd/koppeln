@@ -1,27 +1,18 @@
-extern crate dns;
+extern crate koppeln;
 
 use std::env;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use dns::settings;
+use koppeln::settings;
 
-pub fn write_config(config: &str) -> PathBuf {
-    let path: PathBuf = [env!("CARGO_MANIFEST_DIR"), r".tmp", r"config.toml"]
-        .iter()
-        .collect();
-
-    write_config_at(path.as_path(), config);
-
-    path
-}
-
-pub fn write_config_at(path: &Path, contents: &str) {
-    fs::create_dir_all(path.parent().unwrap());
-    fs::write(path, contents).unwrap();
-}
+use std::collections::HashMap;
+use std::time::Duration;
+use std::time::Instant;
 
 #[test]
+#[ignore]
 pub fn default_settings() {
     env::set_var("RUN_MODE", "production");
     let s = settings::Settings::load().unwrap();
@@ -31,6 +22,7 @@ pub fn default_settings() {
 }
 
 #[test]
+#[ignore]
 fn load_production_settings_from_env_file() {
     env::set_var("RUN_MODE", "production");
     let s = settings::Settings::load().unwrap();
@@ -40,6 +32,7 @@ fn load_production_settings_from_env_file() {
 }
 
 #[test]
+#[ignore]
 fn load_development_settings_by_default() {
     env::remove_var("RUN_MODE");
     let s = settings::Settings::load().unwrap();
@@ -49,6 +42,7 @@ fn load_development_settings_by_default() {
 }
 
 #[test]
+#[ignore]
 fn load_addresses() {
     env::remove_var("RUN_MODE");
     let s = settings::Settings::load().unwrap();

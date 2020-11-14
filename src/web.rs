@@ -64,5 +64,5 @@ pub async fn update_address_handler(token: String, update_info: UpdateInfo, stor
         IpAddr::V6(ipv6) => addr.ipv6 = Some(ipv6)
     }
 
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
