@@ -6,7 +6,7 @@ At the moment Koppeln is under heavy development and therefore not yet ready for
 To build and run Koppeln from source you can either use `cargo` or `docker`. See instructions below. In any case the first step is to get the newest version from github:
 
 ```
-git clone TODO
+git clone https://github.com/kunerd/koppeln.git
 ```
 
 Keep in mind that the current version is only tested to work under the Linux operating system. Building and running it under other OS may or may not work. Anyway, feel free to create an issue, if you encounter any problem during build or while running the server. 
