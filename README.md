@@ -68,5 +68,5 @@ $ curl -X PUT \
 All kinds of contributions are highly welcome. [Create tickets](https://github.com/kunerd/koppeln/issues/new) with feature requests, design ideas and so on. You can also find me on Rusts Discord channels `#rust-usage` and `#beginners`.
 
 ## License
-This project is licensed under MIT license ([LICENSE](LICENSE.md) or https://opensource.org/licenses/MIT)
+This project is licensed under MIT license ([LICENSE](LICENSE) or https://opensource.org/licenses/MIT)
 
