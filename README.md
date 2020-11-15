@@ -1,6 +1,8 @@
 # Koppeln
 Koppeln is a minimalistic standalone dynamic DNS server.
 
+**:warning: WARNING: not ready for production**
+
 ## Usage
 At the moment Koppeln is under heavy development and therefore not yet ready for production use.
 To build and run Koppeln from source you can either use `cargo` or `docker`. See instructions below. In any case the first step is to get the newest version from github:
