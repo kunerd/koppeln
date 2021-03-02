@@ -400,8 +400,7 @@ impl Decoder for DnsMessageCodec {
     }
 }
 
-impl Encoder for DnsMessageCodec {
-    type Item = ResponseMessage;
+impl Encoder<ResponseMessage> for DnsMessageCodec {
     type Error = io::Error;
 
     fn encode(&mut self, data: ResponseMessage, buf: &mut BytesMut) -> Result<(), io::Error> {

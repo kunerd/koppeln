@@ -6,10 +6,8 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::net::UdpSocket;
 
-use hyper::{body::HttpBody as _, Body, Client, Request, Uri};
 use spectral::prelude::*;
-use testcontainers::core::Port;
-use testcontainers::*;
+use testcontainers::{core::{PortMapping, WaitFor}, *};
 use trust_dns_client::client::{Client as DnsClient, ClientHandle, AsyncClient};
 use trust_dns_client::op::DnsResponse;
 use trust_dns_client::rr::{DNSClass, Name, RData, Record, RecordType};
@@ -18,7 +16,6 @@ use trust_dns_client::udp::UdpClientStream;
 #[derive(Default)]
 struct TestServer;
 
-// TODO replace with GenericImage
 impl Image for TestServer {
     type Args = Vec<String>;
     type EnvVars = HashMap<String, String>;
@@ -29,12 +26,9 @@ impl Image for TestServer {
         String::from("dyndns-debian:latest")
     }
 
-    fn wait_until_ready<D: Docker>(&self, container: &Container<D, Self>) {
-        container
-            .logs()
-            .stderr
-            .wait_for_message("DNS server now listening")
-            .unwrap();
+    fn ready_conditions(&self) -> Vec<WaitFor> {
+        //vec![WaitFor::message_on_stdout("DNS server now listening")]
+        vec![WaitFor::message_on_stderr("DNS server now listening")]
     }
 
     fn args(&self) -> <Self as Image>::Args {
@@ -54,18 +48,7 @@ impl Image for TestServer {
         env
     }
 
-    fn ports(&self) -> Option<Vec<Port>> {
-        let mut ports: Vec<Port> = Vec::new();
-        ports.push(Port {
-            local: 8080,
-            internal: 80,
-        });
-        ports.push((5353, 53).into());
-
-        Some(ports)
-    }
-
-    fn with_args(self, _arguments: <Self as Image>::Args) -> Self {
+    fn with_args(self, _: <Self as Image>::Args) -> Self {
         self
     }
 }
@@ -76,27 +59,43 @@ async fn should_get_the_correct_ipv4() {
     let _ = pretty_env_logger::try_init();
     let docker = clients::Cli::default();
 
-    let container = docker.run(TestServer);
+    println!("container starting");
+    let container = docker.run_with_args(
+        TestServer,
+        RunArgs::default()
+            .with_mapped_port(PortMapping::Udp{local: 5453, internal: 53})
+            .with_mapped_port(PortMapping::Tcp{local: 8080, internal: 80})
+    );
 
-    let client = Client::new();
-    let req = Request::builder()
-        .method("PUT")
-        .uri("http://localhost:8080/hostname")
+    let host_port = container.get_host_port(80);
+
+    println!("containe running: {}", host_port);
+
+    let mut map = HashMap::new();
+    map.insert("hostname", "test.dyn.example.com");
+    map.insert("ip", "12.13.14.15");
+
+    let client = reqwest::Client::new();
+    let res = client.put("http://localhost:8080/hostname")
         .header("Authorization", "super_secure")
-        .body(Body::from(
-            "{\"hostname\":\"test.dyn.example.com\", \"ip\":\"12.13.14.15\"}",
-        ))
-        .expect("request builder");
-    let res = client.request(req).await.expect("http request");
+        .json(&map)
+        .send()
+        .await
+    .unwrap();
+
     println!("status: {}", res.status());
 
-    let address = "127.0.0.1:5353".parse().unwrap();
-    let stream = UdpClientStream::<UdpSocket>::new(address);
+    //let stream = UdpClientStream::<UdpSocket>::new(([127, 0, 0, 1], 5453).into());
+    let stream = UdpClientStream::<UdpSocket>::new(([8, 8, 8, 8], 53).into());
     //let (mut client, bg) = runtime.block_on(client).expect("connection failed");
     let (mut client, bg) = AsyncClient::connect(stream).await.expect("connection failed");
 
-    let name = Name::from_str("test.dyn.example.com.").unwrap();
-    let response = client.query(name, DNSClass::IN, RecordType::A).await.unwrap();
+    //let name = Name::from_str("test.dyn.example.com.").unwrap();
+    let name = Name::from_str("www.example.com.").unwrap();
+    println!("{:?}", name);
+    let query = client.query(name, DNSClass::IN, RecordType::A);
+    let response = query.await.unwrap();
+    println!("{:?}", response);
     let answers: &[Record] = response.answers();
     if let &RData::A(ref ip) = answers[0].rdata() {
         assert_eq!(*ip, Ipv4Addr::new(12, 13, 14, 15))

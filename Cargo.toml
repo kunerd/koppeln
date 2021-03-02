@@ -5,7 +5,7 @@ authors = ["Hendrik Kunert <>"]
 edition = "2018"
 
 [dependencies]
-bytes = "0.5"
+bytes = "1.0.1"
 nom = "5.1"
 bitflags = "1.2"
 toml = "0.5.6"
@@ -13,18 +13,21 @@ serde = { version = "1.0", features = ["derive"] }
 config = "0.9"
 log = "0.4"
 env_logger = "0.7.1"
-tokio = { version = "0.2", features = ["full"] }
+#tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "1.2", features = ["full"] }
 warp = "0.2"
 futures = "0.3"
-tokio-util = { version = "0.2.0", features = ["udp", "codec"] }
+tokio-util = { version = "0.6.3", features = ["net", "codec"] }
 
 [dev-dependencies]
-testcontainers = "0.11"
+# testcontainers = "0.11"
+# testcontainers = { git = "https://github.com/kunerd/testcontainers-rs.git", branch = "add_udp_sctp_port_mappings" }
+testcontainers = { path = "../testcontainers-rs" }
 spectral = "0.6.0"
 pretty_env_logger = "0.4"
 tempfile = "3.1"
-trust-dns-client = "0.19.6"
-hyper = "0.13.9"
+trust-dns-client = "0.20"
+reqwest = { version = "0.11", features = ["json"] }
 
 [lib]
 name = "koppeln"

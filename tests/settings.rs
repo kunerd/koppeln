@@ -1,15 +1,15 @@
 extern crate koppeln;
 
 use std::env;
-use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+//use std::fs;
+//use std::io::{BufRead, BufReader};
+//use std::path::{Path, PathBuf};
 
 use koppeln::settings;
 
-use std::collections::HashMap;
-use std::time::Duration;
-use std::time::Instant;
+//use std::collections::HashMap;
+//use std::time::Duration;
+//use std::time::Instant;
 
 #[test]
 #[ignore]

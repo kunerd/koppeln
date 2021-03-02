@@ -8,19 +8,22 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
 use env_logger::Env;
-use tokio::net::UdpSocket;
-use tokio::stream::StreamExt;
-use tokio_util::udp::UdpFramed;
 use futures::{FutureExt, SinkExt};
+use tokio::net::UdpSocket;
+//use tokio::stream::StreamExt;
+use futures::stream::StreamExt;
+use tokio::sync::Mutex;
+use tokio_util::udp::UdpFramed;
 
 use koppeln::settings::{AddressConfig, Settings};
 use koppeln::web;
 use koppeln::DnsMessageCodec;
 use koppeln::DnsStandardQuery;
 use koppeln::ResponseMessage;
-use koppeln::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage};
+use koppeln::{
+    DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage,
+};
 
 #[tokio::main]
 async fn main() {
@@ -30,15 +33,18 @@ async fn main() {
     debug!("Settings:\n{:?}", settings);
 
     let storage = Arc::new(Mutex::new(settings.addresses));
-    
+
     let web_server_address = SocketAddr::from((settings.web_address, settings.web_port));
-    let update_server = tokio::spawn(web::create_update_server(web_server_address, storage.clone()));
+    let update_server = tokio::spawn(web::create_update_server(
+        web_server_address,
+        storage.clone(),
+    ));
     info!(
         "HTTP server now listening on: {ip}:{port}",
         ip = settings.web_address,
         port = settings.web_port
     );
-    
+
     let addr = SocketAddr::from((settings.dns_address, settings.dns_port));
     let udp_socket = UdpSocket::bind(&addr).await.unwrap();
     let mut dns_stream = UdpFramed::new(udp_socket, DnsMessageCodec::new());
@@ -62,13 +68,13 @@ async fn main() {
                 // FIXME response with not implemented error
                 _ => panic!("Not Implemented"), // TODO: not implemented response
             };
-            
+
             debug!("DNS response: {:?}", response);
             dns_stream.send((response, addr)).await.unwrap();
         }
     });
 
-    futures::try_join!(update_server, udp_server).unwrap();
+    futures::future::try_join(update_server, udp_server).await;
 }
 
 fn handle_standard_query(
