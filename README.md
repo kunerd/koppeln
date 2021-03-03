@@ -48,6 +48,11 @@ $ docker run \
 koppeln
 ```
 
+### Build .deb files
+```
+cargo install --force cargo-make
+```
+
 ### Update a DNS entry
 All configuration files under `./config` contain an entry to setup the DNS address `test.dyn.example.com`.
 

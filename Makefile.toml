@@ -1,0 +1,41 @@
+#[tasks.format]
+#install_crate = "rustfmt"
+#command = "cargo"
+#args = ["fmt", "--", "--emit=files"]
+[env]
+DOCKER_BUILDKIT=1
+DEB_FILE="koppeln_0.1.0_amd64.deb"
+
+[tasks.package-deb]
+command = "docker"
+args = [
+    "build",
+    "-t", "koppeln-build",
+    "-o", "./debian",
+    "."
+]
+
+[tasks.lxc-setup]
+script = [
+    "lxc launch images:debian/11 koppeln",
+    "sleep 5",
+    "lxc file push ./debian/${DEB_FILE} koppeln/tmp/${DEB_FILE}"
+]
+dependencies = [ "package-deb" ]
+
+[tasks.lxc-cleanup]
+script = [
+    "lxc delete --force koppeln",
+]
+
+[tasks.lxc-install]
+script = [
+    "lxc exec koppeln -- dpkg -i /tmp/${DEB_FILE}",
+]
+
+[tasks.lxc]
+dependencies = [
+    "lxc-cleanup",
+    "lxc-setup",
+    "lxc-install"
+]
