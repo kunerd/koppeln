@@ -382,21 +382,23 @@ impl Decoder for DnsMessageCodec {
     type Item = QueryMessage;
     type Error = io::Error;
 
+    // FIXME: needs ot be reafactored
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
         debug!("Unpacking DNS query.");
-        if !buf.is_empty() {
-            let len = buf.len();
-            // if packet is shorter than the header the packet is invalid
-            // move this check into parser
-            if len < 12 {
-                return Err(io::Error::from(io::ErrorKind::Other));
-            }
-
-            let query = QueryMessage::from_u8(&buf);
-            Ok(Some(query))
-        } else {
-            Ok(None)
+        if buf.is_empty() {
+            return Ok(None);
         }
+
+        let len = buf.len();
+        // if packet is shorter than the header the packet is invalid
+        // move this check into parser
+        if len < 12 {
+            return Err(io::Error::from(io::ErrorKind::Other));
+        }
+
+        let (_, query) = parser::dns_query(&buf.split()).unwrap();
+
+        Ok(Some(query))
     }
 }
 
