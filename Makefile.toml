@@ -1,7 +1,3 @@
-#[tasks.format]
-#install_crate = "rustfmt"
-#command = "cargo"
-#args = ["fmt", "--", "--emit=files"]
 [env]
 DOCKER_BUILDKIT=1
 DEB_FILE="koppeln_0.1.0_amd64.deb"
@@ -19,7 +15,6 @@ args = [
 script = [
     "lxc launch images:debian/11 koppeln",
     "sleep 5",
-    "lxc file push ./debian/${DEB_FILE} koppeln/tmp/${DEB_FILE}"
 ]
 dependencies = [ "package-deb" ]
 
@@ -30,6 +25,7 @@ script = [
 
 [tasks.lxc-install]
 script = [
+    "lxc file push ./debian/${DEB_FILE} koppeln/tmp/${DEB_FILE}",
     "lxc exec koppeln -- dpkg -i /tmp/${DEB_FILE}",
 ]
 
