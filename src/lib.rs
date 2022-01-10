@@ -339,7 +339,6 @@ impl From<&QueryMessage> for Vec<u8> {
         match msg {
             QueryMessage::StandardQuery(query) => {
                 let mut raw_query: Vec<u8> = vec![];
-                //raw_query.append(&query.header.into());
                 raw_query.append(&mut Into::<Vec<u8>>::into(&query.header));
                 raw_query.append(&mut Into::<Vec<u8>>::into(&query.question));
                 raw_query

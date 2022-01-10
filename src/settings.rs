@@ -42,7 +42,7 @@ impl Settings {
         let mut c = Config::new();
 
         let env = env::var("RUN_MODE").unwrap_or("development".into());
-        c.merge(File::with_name(&format!("/etc/koppeln/{}", env)).required(false))?;
+        c.merge(File::with_name("/etc/koppeln/config.toml").required(false))?;
         c.merge(File::with_name(&format!("config/{}", env)).required(false))?;
 
         c.merge(Environment::with_prefix("koppeln"))?;

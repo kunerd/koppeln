@@ -15,18 +15,23 @@ args = [
 script = [
     "lxc launch images:debian/11 koppeln",
     "sleep 5",
+    "lxc launch images:debian/11 drill",
+    "lxc exec drill -- apt-get install -y ldnsutils",
 ]
 dependencies = [ "package-deb" ]
 
 [tasks.lxc-cleanup]
 script = [
     "lxc delete --force koppeln",
+    "lxc delete --force drill",
 ]
 
 [tasks.lxc-install]
 script = [
     "lxc file push ./debian/${DEB_FILE} koppeln/tmp/${DEB_FILE}",
     "lxc exec koppeln -- dpkg -i /tmp/${DEB_FILE}",
+    "lxc file push -p ./debian/config.toml koppeln/etc/koppeln/config.toml",
+    "lxc exec koppeln -- systemctl restart koppeln.service"
 ]
 
 [tasks.lxc]
@@ -34,4 +39,16 @@ dependencies = [
     "lxc-cleanup",
     "lxc-setup",
     "lxc-install"
+]
+
+[tasks.e2e-tests]
+#dependencies = [ "lxc" ]
+command = "cargo"
+args = [
+    "test",
+    "--test", "*",
+    "--manifest-path", "e2e-tests/Cargo.toml",
+    "--",
+    "--test-threads=1",
+    "--nocapture"
 ]
