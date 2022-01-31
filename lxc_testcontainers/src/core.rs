@@ -19,6 +19,11 @@ pub enum LxcContainerError {
     },
     #[error("lxc error: {0}")]
     LxcCommand(String),
+    #[error(transparent)]
+    InfoParseError {
+        #[from]
+        source: serde_json::Error,
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -53,6 +58,19 @@ impl LxcContainer {
         })?;
 
         Ok(())
+    }
+
+    pub fn get_info(&self) -> Result<InstanceInfo, LxcContainerError> {
+        let output = lxc_command(|cmd| {
+            cmd.arg("list")
+            .arg(format!("{}$", self.name)) // $ is used for an exact match
+            .args(["--format", "json"])
+        })?;
+
+        let json = String::from_utf8_lossy(&output.stdout);
+        let instance_infos: Vec<InstanceInfo> = serde_json::from_str(&json)?;
+
+        Ok(instance_infos.into_iter().next().unwrap())
     }
 
     pub fn get_ips(&self) -> Result<Vec<IpAddr>, LxcContainerError> {
@@ -104,18 +122,18 @@ impl LxcContainer {
 }
 
 #[derive(PartialEq, Deserialize, Debug)]
-struct InstanceInfo {
+pub struct InstanceInfo {
     state: InstanceState,
 }
 
 #[derive(PartialEq, Deserialize, Debug)]
-struct InstanceState {
+pub struct InstanceState {
     network: HashMap<String, NetworkAdapter>,
 }
 
 
 #[derive(PartialEq, Deserialize, Debug)]
-struct NetworkAdapter {
+pub struct NetworkAdapter {
     #[serde(deserialize_with = "addresses_object_to_vec")]
     addresses: Vec<IpAddr>,
 }

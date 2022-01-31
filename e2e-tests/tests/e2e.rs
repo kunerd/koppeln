@@ -6,8 +6,9 @@ use std::collections::HashMap;
 use std::path::{PathBuf, Path};
 use std::time::Duration;
 
+use lxc_testcontainers::LxcContainer;
+
 use test_helper::drill::{parse_drill_output, DrillOutput};
-use test_helper::linux_containers::LxcContainer;
 
 struct TestContainer {
     base_container: LxcContainer,

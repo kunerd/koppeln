@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use names::Generator;
 
-use test_helper::linux_containers::{LxcContainer, LxcContainerError};
+use lxc_testcontainers::core::{LxcContainer, LxcContainerError};
 
 struct TestContainer {
     image_name: String,
