@@ -1,34 +1,211 @@
-use std::{process::{Command, Output}, path::{Path, PathBuf}};
+use std::{
+    collections::HashMap,
+    io,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::{Command, Output},
+    str::FromStr,
+};
 
+use serde::Deserialize;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum LxcContainerError {
+    #[error(transparent)]
+    Io {
+        #[from]
+        source: io::Error,
+    },
+    #[error("lxc error: {0}")]
+    LxcCommand(String),
+}
+
+#[derive(Deserialize, Debug)]
 pub struct LxcContainer {
-    name: String,
+    pub name: String,
 }
 
 impl LxcContainer {
-    pub fn new(name: String) -> Self {
-        LxcContainer { name }
+    pub fn launch(image_name: &str, instance_name: String) -> Result<Self, LxcContainerError> {
+        lxc_command(|cmd| {
+            cmd.arg("launch")
+                .arg(format!("images:{}", image_name))
+                .arg(&instance_name)
+        })?;
+
+        Ok(Self {
+            name: instance_name,
+        })
     }
 
-    pub fn exec(&self, f: &dyn Fn(&mut Command) -> &mut Command) -> std::io::Result<Output> {
-        let mut cmd = Command::new("lxc");
-        let c = cmd.arg("exec").arg(self.name.clone()).arg("--");
+    pub fn stop(&self) -> Result<(), LxcContainerError> {
+        lxc_command(|cmd| {
+            cmd.arg("stop").arg(&self.name)
+        })?;
 
-        f(c).output()
+        Ok(())
     }
 
-    pub fn file_push(&self, source_path: &impl AsRef<Path>, destination_path: &impl AsRef<Path>) -> std::io::Result<Output> {
-        //"lxc file push -p ./debian/config.toml koppeln/etc/koppeln/config.toml",
-        //
+    pub fn delete(&self) -> Result<(), LxcContainerError> {
+        lxc_command(|cmd| {
+            cmd.arg("delete").arg(&self.name)
+        })?;
+
+        Ok(())
+    }
+
+    pub fn get_ips(&self) -> Result<Vec<IpAddr>, LxcContainerError> {
+        let output = lxc_command(|cmd| {
+            cmd.arg("list")
+            .arg(format!("{}$", self.name)) // $ is used for an exact match
+            .args(["--format", "json"])
+        })?;
+
+        let json = String::from_utf8(output.stdout).unwrap();
+        let instance_info: Vec<InstanceInfo> = serde_json::from_str(&json).unwrap();
+
+        Ok(instance_info
+            .first()
+            .unwrap()
+            .state
+            .network
+            .get("eth0")
+            .unwrap()
+            .addresses
+            .clone())
+    }
+
+    pub fn exec(&self, f: &dyn Fn(&mut Command) -> &mut Command) -> Result<Output, LxcContainerError> {
+        lxc_command(|cmd| {
+            let c = cmd.arg("exec").arg(self.name.clone()).arg("--");
+
+            f(c)
+        })
+    }
+
+    pub fn file_push(
+        &self,
+        source_path: &impl AsRef<Path>,
+        destination_path: &impl AsRef<Path>,
+    ) -> Result<(), LxcContainerError> {
         let mut container_dest_path = PathBuf::from(self.name.clone());
         container_dest_path.push(destination_path);
 
-        println!("{:?}", container_dest_path);
-
-        Command::new("lxc")
-            .arg("file")
+        lxc_command(|cmd| {
+            cmd.arg("file")
             .arg("push")
             .arg(source_path.as_ref())
             .arg(container_dest_path.as_os_str())
-            .output()
+        })?;
+
+        Ok(())
+    }
+}
+
+#[derive(PartialEq, Deserialize, Debug)]
+struct InstanceInfo {
+    state: InstanceState,
+}
+
+#[derive(PartialEq, Deserialize, Debug)]
+struct InstanceState {
+    network: HashMap<String, NetworkAdapter>,
+}
+
+
+#[derive(PartialEq, Deserialize, Debug)]
+struct NetworkAdapter {
+    #[serde(deserialize_with = "addresses_object_to_vec")]
+    addresses: Vec<IpAddr>,
+}
+
+
+fn addresses_object_to_vec<'de, D>(deserializer: D) -> Result<Vec<IpAddr>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct AddressObject {
+        address: String,
+    }
+
+    let addresses = Vec::<AddressObject>::deserialize(deserializer)?
+        .into_iter()
+        .map(|AddressObject { address }| IpAddr::from_str(&address).unwrap())
+        .collect();
+
+    Ok(addresses)
+}
+
+
+fn lxc_command<F: FnOnce(&mut Command) -> &mut Command>(
+    func: F,
+) -> Result<Output, LxcContainerError> {
+    let mut command = Command::new("lxc");
+
+    let output = func(&mut command).output()?;
+
+    if output.status.success() {
+        Ok(output)
+    } else {
+        let mut error = String::from_utf8_lossy(&output.stdout).into_owned();
+        error.push_str(&String::from_utf8_lossy(&output.stderr).into_owned());
+        Err(LxcContainerError::LxcCommand(error))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn parse_lxc_info_json() {
+        let json = r#"
+{
+    "state" : {
+        "network" : {
+            "eth0" : {
+                "addresses" : [
+                    {
+                       "address" : "10.228.250.181",
+                       "family" : "inet",
+                       "netmask" : "24",
+                       "scope" : "global"
+                    },
+                    {
+                       "address" : "fd42:528d:b20d:4e5f:216:3eff:fe44:add9",
+                       "family" : "inet6",
+                       "netmask" : "64",
+                       "scope" : "global"
+                    },
+                    {
+                       "address" : "fe80::216:3eff:fe44:add9",
+                       "family" : "inet6",
+                       "netmask" : "64",
+                       "scope" : "link"
+                    }
+                ]
+            }
+        }
+    }
+}
+"#;
+        assert_eq!(
+            serde_json::from_str::<InstanceInfo>(&json).unwrap(),
+            InstanceInfo {
+                state: InstanceState {
+                    network: HashMap::from([(
+                        "eth0".to_string(),
+                        NetworkAdapter {
+                            addresses: vec![
+                                "10.228.250.181".parse().unwrap(),
+                                "fd42:528d:b20d:4e5f:216:3eff:fe44:add9".parse().unwrap(),
+                                "fe80::216:3eff:fe44:add9".parse().unwrap()
+                            ]
+                        }
+                    )])
+                }
+            }
+        );
     }
 }
