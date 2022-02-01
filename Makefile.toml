@@ -2,6 +2,9 @@
 DOCKER_BUILDKIT=1
 DEB_FILE="koppeln_0.1.0_amd64.deb"
 
+[config]
+default_to_workspace = false
+
 [tasks.package-deb]
 command = "docker"
 args = [
@@ -30,7 +33,7 @@ script = [
 script = [
     "lxc file push ./debian/${DEB_FILE} koppeln/tmp/${DEB_FILE}",
     "lxc exec koppeln -- dpkg -i /tmp/${DEB_FILE}",
-    "lxc file push -p ./debian/config.toml koppeln/etc/koppeln/config.toml",
+    "lxc file push -p ./config/test.toml koppeln/etc/koppeln/config.toml",
     "lxc exec koppeln -- systemctl restart koppeln.service"
 ]
 

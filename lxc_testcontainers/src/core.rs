@@ -35,7 +35,7 @@ impl LxcContainer {
     pub fn launch(image_name: &str, instance_name: String) -> Result<Self, LxcContainerError> {
         lxc_command(|cmd| {
             cmd.arg("launch")
-                .arg(format!("images:{}", image_name))
+                .arg(image_name)
                 .arg(&instance_name)
         })?;
 

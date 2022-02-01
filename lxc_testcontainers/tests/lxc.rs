@@ -30,7 +30,7 @@ impl TestContainer {
 
 #[test]
 fn test_container_launch_and_stop() -> Result<(), LxcContainerError> {
-    TestContainer::new("debian/buster".into()).with(|c| {
+    TestContainer::new("images:debian/buster".into()).with(|c| {
         thread::sleep(Duration::from_millis(5000));
 
         let stdout = Command::new("lxc")
@@ -53,7 +53,7 @@ fn test_container_launch_and_stop() -> Result<(), LxcContainerError> {
 
 #[test]
 fn test_container_ips() -> Result<(), LxcContainerError> {
-    TestContainer::new("debian/buster".into()).with(|c| {
+    TestContainer::new("images:debian/buster".into()).with(|c| {
         thread::sleep(Duration::from_millis(5000));
 
         let ips = c.get_ips()?;

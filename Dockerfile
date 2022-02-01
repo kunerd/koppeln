@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:experimental
-FROM rust:1.47-slim-buster as builder
+FROM rust:1.57-slim-buster as builder
 WORKDIR /usr/src/koppeln
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo install cargo-deb
