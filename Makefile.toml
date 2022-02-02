@@ -14,44 +14,49 @@ args = [
     "."
 ]
 
-[tasks.lxc-setup]
+[tasks.cleanup-lxc-server-image]
+ignore_errors = true
 script = [
-    "lxc launch images:debian/11 koppeln",
+    "lxc delete --force koppeln-server-base"
+]
+
+[tasks.setup-lxc-server-image]
+dependencies = [ "cleanup-lxc-server-image" ]
+script = [
+    "lxc launch images:debian/11 koppeln-server-base",
     "sleep 5",
-    "lxc launch images:debian/11 drill",
-    "lxc exec drill -- apt-get install -y ldnsutils",
+    "lxc file push -p ./debian/${DEB_FILE} koppeln-server-base/tmp/${DEB_FILE}",
+    "lxc file push -p ./debian/config.toml koppeln-server-base/etc/koppeln/config.toml",
+    "lxc exec koppeln-server-base -- dpkg -i /tmp/${DEB_FILE}",
+    "lxc snapshot --reuse koppeln-server-base snapshot",
+    "lxc publish --compression=none koppeln-server-base/snapshot --alias koppeln-server",
 ]
-dependencies = [ "package-deb" ]
 
-[tasks.lxc-cleanup]
+[tasks.cleanup-lxc-client-image]
+ignore_errors = true
 script = [
-    "lxc delete --force koppeln",
-    "lxc delete --force drill",
+    "lxc delete --force drill-client-base"
 ]
 
-[tasks.lxc-install]
+[tasks.setup-lxc-client-image]
+dependencies = [ "cleanup-lxc-client-image" ]
 script = [
-    "lxc file push ./debian/${DEB_FILE} koppeln/tmp/${DEB_FILE}",
-    "lxc exec koppeln -- dpkg -i /tmp/${DEB_FILE}",
-    "lxc file push -p ./config/test.toml koppeln/etc/koppeln/config.toml",
-    "lxc exec koppeln -- systemctl restart koppeln.service"
+    "lxc launch images:debian/11 drill-client-base",
+    "lxc exec drill-client-base -- apt-get install -y ldnsutils",
+    "lxc snapshot --reuse drill-client-base snapshot",
+    "lxc publish --compression=none drill-client-base/snapshot --alias drill-client",
 ]
 
-[tasks.lxc]
+[tasks.setup-lxc]
 dependencies = [
-    "lxc-cleanup",
-    "lxc-setup",
-    "lxc-install"
+    "setup-lxc-server-image",
+    "setup-lxc-client-image",
 ]
 
 [tasks.e2e-tests]
-#dependencies = [ "lxc" ]
+dependencies = [ "setup-lxc" ]
 command = "cargo"
 args = [
     "test",
-    "--test", "*",
-    "--manifest-path", "e2e-tests/Cargo.toml",
-    "--",
-    "--test-threads=1",
-    "--nocapture"
+    "-p", "e2e_tests"
 ]

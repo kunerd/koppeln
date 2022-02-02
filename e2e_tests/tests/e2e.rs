@@ -13,7 +13,7 @@ use lxc_testcontainers::TestContainer;
 
 #[test]
 fn test_query_unknown_domain() -> Result<(), LxcContainerError> {
-    TestContainer::new("local_koppeln".into()).with(|koppeln| {
+    TestContainer::new("koppeln-server".into()).with(|koppeln| {
         loop {
             let output = koppeln.exec(&|cmd| {
                 cmd.arg("systemctl")
@@ -29,7 +29,7 @@ fn test_query_unknown_domain() -> Result<(), LxcContainerError> {
             std::thread::sleep(Duration::from_millis(200));
         }
 
-        TestContainer::new("local_drill".into()).with(|drill| {
+        TestContainer::new("drill-client".into()).with(|drill| {
             // TODO wait until ready
             std::thread::sleep(Duration::from_millis(3000));
 
@@ -59,7 +59,7 @@ fn test_query_unknown_domain() -> Result<(), LxcContainerError> {
 
 #[test]
 fn test_set_ip_for_domain_name() -> Result<(), LxcContainerError> { 
-    TestContainer::new("local_koppeln".into()).with(|koppeln| {
+    TestContainer::new("koppeln-server".into()).with(|koppeln| {
         std::thread::sleep(Duration::from_secs(1));
 
         // push default config file
@@ -107,7 +107,7 @@ fn test_set_ip_for_domain_name() -> Result<(), LxcContainerError> {
             .send()
             .expect("Could not set new IP address");
 
-        TestContainer::new("local_drill".into()).with(|drill| {
+        TestContainer::new("drill-client".into()).with(|drill| {
             // TODO wait until ready
             std::thread::sleep(Duration::from_millis(3000));
 
