@@ -1,0 +1,33 @@
+name: CI
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: docker-practice/actions-setup-docker@master
+    - run: |
+        set -x
+
+        docker version
+
+        docker run --rm hello-world
+
+    - run: |
+        sudo snap install lxd
+
+        sudo lxd init --minimal
+
+        lxc --version
+    - run: sudo chmod o+g '/var/snap/lxd/common/lxd/unix.socket'
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+            # - run: cargo build --release --all-features
+    - run: cargo test
+    - uses: davidB/rust-cargo-make@v1
+    - run: cargo make -v package-deb
+    - run: cargo make -v e2e-tests
