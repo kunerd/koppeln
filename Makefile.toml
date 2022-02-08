@@ -1,16 +1,37 @@
 [env]
-DOCKER_BUILDKIT=1
-DEB_FILE="koppeln_0.1.0_amd64.deb"
+DEB_PACKAGE_PATH = "./debian"
 
 [config]
 default_to_workspace = false
 
+[tasks.build]
+command = "docker"
+args = [
+    "buildx",
+    "build",
+    "--target", "build",
+    "-t", "koppeln-build",
+    "."
+]
+
+[tasks.test]
+command = "docker"
+args = [
+    "buildx",
+    "build",
+    "--target", "test-build",
+    "-t", "koppeln-test-build",
+    "."
+]
+
 [tasks.package-deb]
 command = "docker"
 args = [
+    "buildx",
     "build",
-    "-t", "koppeln-build",
-    "-o", "./debian",
+    "--target", "deb-file",
+    "-t", "koppeln-build-deb",
+    "-o", "${DEB_PACKAGE_PATH}",
     "."
 ]
 
@@ -21,11 +42,15 @@ script = [
 ]
 
 [tasks.setup-lxc-server-image]
-dependencies = [ "cleanup-lxc-server-image" ]
+env = { DEB_FILE = { script = ["find ${DEB_PACKAGE_PATH} -name \"*.deb\" -printf \"%f\n\""] }}
+dependencies = [ 
+    "package-deb",
+    "cleanup-lxc-server-image"
+]
 script = [
     "lxc launch images:debian/11 koppeln-server-base",
     "sleep 5",
-    "lxc file push -p ./debian/${DEB_FILE} koppeln-server-base/tmp/${DEB_FILE}",
+    "lxc file push -p ./debian/${DEB_FILE} koppeln-server-base/tmp/",
     "lxc file push -p ./debian/config.toml koppeln-server-base/etc/koppeln/config.toml",
     "lxc exec koppeln-server-base -- dpkg -i /tmp/${DEB_FILE}",
     "lxc snapshot --reuse koppeln-server-base snapshot",

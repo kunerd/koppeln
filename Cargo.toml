@@ -28,7 +28,6 @@ tokio = { version = "1.2", features = ["full"] }
 tokio-util = { version = "0.6.3", features = ["net", "codec"] }
 
 [package.metadata.deb]
-name = "koppeln"
 section = "net"
 #extended-description-file = "debian/description.txt"
 #license-file = ["LICENSE", "0"]

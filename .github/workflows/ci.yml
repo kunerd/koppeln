@@ -11,9 +11,6 @@ jobs:
         set -x
 
         docker version
-
-        docker run --rm hello-world
-
     - run: |
         sudo snap install lxd
 
@@ -25,9 +22,5 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-
-            # - run: cargo build --release --all-features
-    - run: cargo test
     - uses: davidB/rust-cargo-make@v1
-    - run: cargo make -v package-deb
     - run: cargo make -v e2e-tests
