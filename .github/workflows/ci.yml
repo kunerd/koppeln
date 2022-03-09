@@ -1,3 +1,4 @@
+---
 name: CI
 on: push
 
@@ -5,22 +6,38 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: docker-practice/actions-setup-docker@master
-    - run: |
-        set -x
+      - name: Checkout
+        uses: actions/checkout@v2
 
-        docker version
-    - run: |
-        sudo snap install lxd
+      - name: Install Rust toolchain  make
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
 
-        sudo lxd init --minimal
+      - name: Install Cargo make
+        uses: davidB/rust-cargo-make@v1
 
-        lxc --version
-    - run: sudo chmod o+g '/var/snap/lxd/common/lxd/unix.socket'
+      - name: Setup Docker
+        uses: docker-practice/actions-setup-docker@master
 
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-    - uses: davidB/rust-cargo-make@v1
-    - run: cargo make -v e2e-tests
+      - name: Build
+        run: cargo make build
+
+      - name: Unit tests
+        run: cargo make test
+
+      - name: Package DEB file
+        run: cargo make package-deb
+
+      - name: Setup Linux Containers
+        run: |
+          sudo snap install lxd
+
+          sudo lxd init --minimal
+
+          lxc --version
+
+          sudo chmod o+g '/var/snap/lxd/common/lxd/unix.socket'
+
+      - name: Run end-to-end tests
+        run: cargo make e2e-tests
