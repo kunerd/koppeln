@@ -94,14 +94,9 @@ fn test_set_ip_for_domain_name() -> Result<(), LxcContainerError> {
         map.insert("hostname", "test.dyn.example.com");
         map.insert("ip", "1.2.3.4");
 
-        let dns_server = format!(
-            "@{}",
-            koppeln.get_ips().unwrap().first().unwrap().to_string()
-        );
-
         let client = reqwest::blocking::Client::new();
         client
-            .put(format!("http://{}/hostname", dns_server))
+            .put(format!("http://{}/hostname", koppeln.get_ips().unwrap().first().unwrap().to_string()))
             .header("Authorization", "super_secure")
             .json(&map)
             .send()
@@ -110,6 +105,11 @@ fn test_set_ip_for_domain_name() -> Result<(), LxcContainerError> {
         TestContainer::new("drill-client".into()).with(|drill| {
             // TODO wait until ready
             std::thread::sleep(Duration::from_millis(3000));
+
+            let dns_server = format!(
+                "@{}",
+                koppeln.get_ips().unwrap().first().unwrap().to_string()
+            );
 
             let output = drill
                 .exec(&|cmd| {

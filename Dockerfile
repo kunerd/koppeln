@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:experimental
+# syntax=docker/dockerfile:1.3
 FROM rust:1.57-slim-buster as build
 WORKDIR /usr/src/koppeln
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

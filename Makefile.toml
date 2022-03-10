@@ -1,5 +1,13 @@
 [env]
+DOCKER_BUILD_FROM_CACHE = "type=inline"
+DOCKER_BUILD_TO_CACHE = "type=inline"
 DEB_PACKAGE_PATH = "./debian"
+
+[env.ci]
+#DOCKER_BUILD_FROM_CACHE = "type=gha"
+#DOCKER_BUILD_TO_CACHE = "type=gha,mode=max"
+DOCKER_BUILD_FROM_CACHE = "type=local,src=/tmp/.buildx-cache"
+DOCKER_BUILD_TO_CACHE = "type=local,dest=/tmp/.buildx-cache-new,mode=max"
 
 [config]
 default_to_workspace = false
@@ -9,6 +17,8 @@ command = "docker"
 args = [
     "buildx",
     "build",
+    "--cache-to", "${DOCKER_BUILD_TO_CACHE}",
+    "--cache-from", "${DOCKER_BUILD_FROM_CACHE}",
     "--target", "build",
     "-t", "koppeln-build",
     "."
@@ -19,6 +29,8 @@ command = "docker"
 args = [
     "buildx",
     "build",
+    "--cache-to", "${DOCKER_BUILD_TO_CACHE}",
+    "--cache-from", "${DOCKER_BUILD_FROM_CACHE}",
     "--target", "test-build",
     "-t", "koppeln-test-build",
     "."
@@ -29,6 +41,8 @@ command = "docker"
 args = [
     "buildx",
     "build",
+    "--cache-to", "${DOCKER_BUILD_TO_CACHE}",
+    "--cache-from", "${DOCKER_BUILD_FROM_CACHE}",
     "--target", "deb-file",
     "-t", "koppeln-build-deb",
     "-o", "${DEB_PACKAGE_PATH}",
