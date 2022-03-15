@@ -47,8 +47,6 @@ jobs:
 
       - name: Setup Linux Containers
         run: |
-          sudo snap install lxd
-
           sudo lxd init --minimal
 
           lxc --version
