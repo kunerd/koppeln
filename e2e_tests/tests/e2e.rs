@@ -87,7 +87,7 @@ fn test_set_ip_for_domain_name() -> Result<(), LxcContainerError> {
                 break;
             }
 
-            std::thread::sleep(Duration::from_millis(200));
+            std::thread::sleep(Duration::from_secs(3));
         }
         // set IP via http
         let mut map = HashMap::new();
@@ -118,7 +118,7 @@ fn test_set_ip_for_domain_name() -> Result<(), LxcContainerError> {
 
             let dns_server = format!(
                 "@{}",
-                koppeln.get_ips().unwrap().first().unwrap().to_string()
+                server_ipv4
             );
 
             let output = drill
