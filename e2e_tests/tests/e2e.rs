@@ -94,9 +94,19 @@ fn test_set_ip_for_domain_name() -> Result<(), LxcContainerError> {
         map.insert("hostname", "test.dyn.example.com");
         map.insert("ip", "1.2.3.4");
 
+        let server_ipv4 = koppeln.get_ips()
+            .unwrap()
+            .iter()
+            .find(|x| match x {
+                std::net::IpAddr::V4(_) => true,
+                _ => false,
+            })
+            .unwrap()
+            .clone();
+
         let client = reqwest::blocking::Client::new();
         client
-            .put(format!("http://{}/hostname", koppeln.get_ips().unwrap().first().unwrap().to_string()))
+            .put(format!("http://{}/hostname", server_ipv4))
             .header("Authorization", "super_secure")
             .json(&map)
             .send()
