@@ -64,6 +64,8 @@ dependencies = [
 script = [
     "lxc launch images:debian/11 koppeln-server-base",
     "sleep 5",
+    "lxc exec koppeln-server-base -- systemctl disable systemd-resolved.service",
+    "lxc exec koppeln-server-base -- systemctl stop systemd-resolved.service",
     "lxc file push -p ./debian/${DEB_FILE} koppeln-server-base/tmp/",
     "lxc file push -p ./debian/config.toml koppeln-server-base/etc/koppeln/config.toml",
     "lxc exec koppeln-server-base -- dpkg -i /tmp/${DEB_FILE}",
@@ -97,5 +99,7 @@ dependencies = [ "setup-lxc" ]
 command = "cargo"
 args = [
     "test",
-    "-p", "e2e_tests"
+    "-p", "e2e_tests",
+    "--",
+    "--test-threads=1"
 ]
