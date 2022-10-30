@@ -15,7 +15,7 @@ impl TestContainer {
         let mut generator = Generator::default();
         let container_name = generator.next().unwrap();
 
-        let mut container = core::LxcContainer::launch(&self.image_name, container_name.into())?;
+        let mut container = core::LxcContainer::launch(&self.image_name, container_name)?;
 
         func(&mut container)?;
         

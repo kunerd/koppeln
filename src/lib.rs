@@ -11,6 +11,7 @@ mod parser;
 pub mod settings;
 pub mod web;
 
+use bytes::Buf;
 use bytes::{BufMut, BytesMut};
 use std::collections::HashMap;
 use std::io;
@@ -137,13 +138,13 @@ impl From<&DnsHeader> for Vec<u8> {
         raw_header.put_u16(header.id);
 
         let mut flags: u16 = 0;
-        flags |= (u16::from(DnsQr::Response as u16) << 15) & 0b1000000000000000;
+        flags |= (u16::from(DnsQr::Response) << 15) & 0b1000000000000000;
         flags |= (u16::from(u8::from(header.opcode)) << 11) & 0b0111100000000000;
         flags |= ((header.authoritative_anser as u16) << 10) & 0b0000010000000000;
         flags |= ((header.truncated as u16) << 9) & 0b0000001000000000;
         flags |= ((header.recursion_desired as u16) << 8) & 0b0000000100000000;
         flags |= ((header.recursion_available as u16) << 7) & 0b0000000010000000;
-        flags |= (u16::from(u8::from(header.response_code)) << 0) & 0b0000000000001111;
+        flags |= u16::from(u8::from(header.response_code)) & 0b0000000000001111;
         raw_header.put_u16(flags);
         raw_header.put_u16(header.qd_count);
         raw_header.put_u16(header.an_count);
@@ -380,6 +381,12 @@ impl DnsMessageCodec { pub fn new() -> Self {
     }
 }
 
+impl Default for DnsMessageCodec {
+    fn default() -> Self {
+        DnsMessageCodec::new()
+    }
+}
+
 impl Decoder for DnsMessageCodec {
     type Item = QueryMessage;
     type Error = io::Error;
@@ -396,14 +403,15 @@ impl Decoder for DnsMessageCodec {
             return Ok(None);
         }
 
-        let res = parser::dns_query(&buf);
+        let res = parser::dns_query(buf);
         match res {
             Ok((rem, query)) => {
-                buf.split_to(len - rem.len());
-                return Ok(Some(query));
+                let rem_len = rem.len();
+                buf.advance(len - rem_len);
+                Ok(Some(query))
             },
             Err(e) => match e {
-                nom::Err::Incomplete(_) => return Ok(None),
+                nom::Err::Incomplete(_) => Ok(None),
                 _ => panic!("Needs to be refactored")
             }
         }
@@ -421,6 +429,7 @@ impl Encoder<ResponseMessage> for DnsMessageCodec {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

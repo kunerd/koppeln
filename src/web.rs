@@ -32,7 +32,7 @@ pub fn update_address(
 }
 
 async fn handle_missing_auth_header(rejection: warp::Rejection) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Some(_) = rejection.find::<warp::reject::MissingHeader>() {
+    if rejection.find::<warp::reject::MissingHeader>().is_some() {
         Ok(StatusCode::UNAUTHORIZED)
     } else {
         Err(rejection)
