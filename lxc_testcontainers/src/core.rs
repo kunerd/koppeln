@@ -76,18 +76,25 @@ impl LxcContainer {
     pub fn get_ips(&self) -> Result<Vec<IpAddr>, LxcContainerError> {
         let output = lxc_command(|cmd| {
             cmd.arg("list")
-            .arg(format!("{}$", self.name)) // $ is used for an exact match
+            // filtering does not work when --format is json
+            //.arg(format!("{}$", self.name)) // $ is used for an exact match
             .args(["--format", "json"])
         })?;
 
         let json = String::from_utf8(output.stdout).unwrap();
-        let instance_info: Vec<InstanceInfo> = serde_json::from_str(&json).unwrap();
+        let instances: Vec<InstanceInfo> = serde_json::from_str(&json).unwrap();
+        // filtering does not work when --format is json
+        // so we have to filter it in code
+        let instances: Vec<InstanceInfo> = instances.into_iter()
+            .filter(|i| i.name.eq(&self.name))
+            .collect();
 
-        Ok(instance_info
+        Ok(instances
             .first()
             .unwrap()
             .state
-            .network
+            .network.as_ref()
+            .unwrap()
             .get("eth0")
             .unwrap()
             .addresses
@@ -123,12 +130,13 @@ impl LxcContainer {
 
 #[derive(PartialEq, Deserialize, Debug)]
 pub struct InstanceInfo {
+    name: String,
     state: InstanceState,
 }
 
 #[derive(PartialEq, Deserialize, Debug)]
 pub struct InstanceState {
-    network: HashMap<String, NetworkAdapter>,
+    network: Option<HashMap<String, NetworkAdapter>>,
 }
 
 

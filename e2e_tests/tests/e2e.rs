@@ -37,6 +37,7 @@ fn test_query_unknown_domain() -> Result<(), LxcContainerError> {
                 "@{}",
                 koppeln.get_ips().unwrap().first().unwrap().to_string()
             );
+
             let output = drill
                 .exec(&|cmd| {
                     cmd.arg("drill")

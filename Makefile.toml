@@ -69,8 +69,9 @@ script = [
     "lxc file push -p ./debian/${DEB_FILE} koppeln-server-base/tmp/",
     "lxc file push -p ./debian/config.toml koppeln-server-base/etc/koppeln/config.toml",
     "lxc exec koppeln-server-base -- dpkg -i /tmp/${DEB_FILE}",
-    "lxc snapshot --reuse koppeln-server-base snapshot",
-    "lxc publish --compression=none koppeln-server-base/snapshot --alias koppeln-server",
+    #"lxc snapshot --reuse koppeln-server-base snapshot",
+    "lxc stop koppeln-server-base",
+    "lxc publish --compression=none koppeln-server-base --alias koppeln-server",
 ]
 
 [tasks.cleanup-lxc-client-image]
@@ -84,8 +85,9 @@ dependencies = [ "cleanup-lxc-client-image" ]
 script = [
     "lxc launch images:debian/11 drill-client-base",
     "lxc exec drill-client-base -- apt-get install -y ldnsutils",
-    "lxc snapshot --reuse drill-client-base snapshot",
-    "lxc publish --compression=none drill-client-base/snapshot --alias drill-client",
+    #"lxc snapshot --reuse drill-client-base snapshot",
+    "lxc stop drill-client-base",
+    "lxc publish --compression=none drill-client-base --alias drill-client",
 ]
 
 [tasks.setup-lxc]
@@ -100,6 +102,4 @@ command = "cargo"
 args = [
     "test",
     "-p", "e2e_tests",
-    "--",
-    "--test-threads=1"
 ]
