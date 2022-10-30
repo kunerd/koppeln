@@ -1,3 +1,5 @@
+[![CI](https://github.com/kunerd/koppeln/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kunerd/koppeln/actions/workflows/ci.yml)
+
 # Koppeln
 Koppeln is a minimalistic standalone dynamic DNS server.
 
