@@ -11,7 +11,6 @@ use std::sync::Arc;
 use env_logger::Env;
 use futures::{FutureExt, SinkExt};
 use tokio::net::UdpSocket;
-//use tokio::stream::StreamExt;
 use futures::stream::StreamExt;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
@@ -74,7 +73,7 @@ async fn main() {
         }
     });
 
-    futures::future::try_join(update_server, udp_server).await;
+    futures::future::try_join(update_server, udp_server).await.unwrap();
 }
 
 fn handle_standard_query(
@@ -97,7 +96,7 @@ fn handle_standard_query(
         if let Some(ip) = address.ipv4 {
             header.an_count = 1;
             return ResponseMessage {
-                header: header,
+                header,
                 question: query.question,
                 answer: vec![DnsResourceRecord {
                     name: Name::with_pointer(11),
@@ -113,7 +112,7 @@ fn handle_standard_query(
 
     header.response_code = DnsResponseCode::NameError;
     ResponseMessage {
-        header: header,
+        header,
         question: query.question,
         answer: vec![],
     }

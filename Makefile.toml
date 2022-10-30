@@ -1,41 +1,105 @@
-#[tasks.format]
-#install_crate = "rustfmt"
-#command = "cargo"
-#args = ["fmt", "--", "--emit=files"]
 [env]
-DOCKER_BUILDKIT=1
-DEB_FILE="koppeln_0.1.0_amd64.deb"
+DOCKER_BUILD_FROM_CACHE = "type=inline"
+DOCKER_BUILD_TO_CACHE = "type=inline"
+DEB_PACKAGE_PATH = "./debian"
+
+[env.ci]
+#DOCKER_BUILD_FROM_CACHE = "type=gha"
+#DOCKER_BUILD_TO_CACHE = "type=gha,mode=max"
+DOCKER_BUILD_FROM_CACHE = "type=local,src=/tmp/.buildx-cache"
+DOCKER_BUILD_TO_CACHE = "type=local,dest=/tmp/.buildx-cache-new,mode=max"
+
+[config]
+default_to_workspace = false
+
+[tasks.build]
+command = "docker"
+args = [
+    "buildx",
+    "build",
+    "--cache-to", "${DOCKER_BUILD_TO_CACHE}",
+    "--cache-from", "${DOCKER_BUILD_FROM_CACHE}",
+    "--target", "build",
+    "-t", "koppeln-build",
+    "."
+]
+
+[tasks.test]
+command = "docker"
+args = [
+    "buildx",
+    "build",
+    "--cache-to", "${DOCKER_BUILD_TO_CACHE}",
+    "--cache-from", "${DOCKER_BUILD_FROM_CACHE}",
+    "--target", "test-build",
+    "-t", "koppeln-test-build",
+    "."
+]
 
 [tasks.package-deb]
 command = "docker"
 args = [
+    "buildx",
     "build",
-    "-t", "koppeln-build",
-    "-o", "./debian",
+    "--cache-to", "${DOCKER_BUILD_TO_CACHE}",
+    "--cache-from", "${DOCKER_BUILD_FROM_CACHE}",
+    "--target", "deb-file",
+    "-t", "koppeln-build-deb",
+    "-o", "${DEB_PACKAGE_PATH}",
     "."
 ]
 
-[tasks.lxc-setup]
+[tasks.cleanup-lxc-server-image]
+ignore_errors = true
 script = [
-    "lxc launch images:debian/11 koppeln",
+    "lxc delete --force koppeln-server-base"
+]
+
+[tasks.setup-lxc-server-image]
+env = { DEB_FILE = { script = ["find ${DEB_PACKAGE_PATH} -name \"*.deb\" -printf \"%f\n\""] }}
+dependencies = [ 
+    "package-deb",
+    "cleanup-lxc-server-image"
+]
+script = [
+    "lxc launch images:debian/11 koppeln-server-base",
     "sleep 5",
-    "lxc file push ./debian/${DEB_FILE} koppeln/tmp/${DEB_FILE}"
+    "lxc exec koppeln-server-base -- systemctl disable systemd-resolved.service",
+    "lxc exec koppeln-server-base -- systemctl stop systemd-resolved.service",
+    "lxc file push -p ./debian/${DEB_FILE} koppeln-server-base/tmp/",
+    "lxc file push -p ./debian/config.toml koppeln-server-base/etc/koppeln/config.toml",
+    "lxc exec koppeln-server-base -- dpkg -i /tmp/${DEB_FILE}",
+    #"lxc snapshot --reuse koppeln-server-base snapshot",
+    "lxc stop koppeln-server-base",
+    "lxc publish --compression=none koppeln-server-base --alias koppeln-server",
 ]
-dependencies = [ "package-deb" ]
 
-[tasks.lxc-cleanup]
+[tasks.cleanup-lxc-client-image]
+ignore_errors = true
 script = [
-    "lxc delete --force koppeln",
+    "lxc delete --force drill-client-base"
 ]
 
-[tasks.lxc-install]
+[tasks.setup-lxc-client-image]
+dependencies = [ "cleanup-lxc-client-image" ]
 script = [
-    "lxc exec koppeln -- dpkg -i /tmp/${DEB_FILE}",
+    "lxc launch images:debian/11 drill-client-base",
+    "lxc exec drill-client-base -- apt-get install -y ldnsutils",
+    #"lxc snapshot --reuse drill-client-base snapshot",
+    "lxc stop drill-client-base",
+    "lxc publish --compression=none drill-client-base --alias drill-client",
 ]
 
-[tasks.lxc]
+[tasks.setup-lxc]
 dependencies = [
-    "lxc-cleanup",
-    "lxc-setup",
-    "lxc-install"
+    "setup-lxc-server-image",
+    "setup-lxc-client-image",
+]
+
+[tasks.e2e-tests]
+dependencies = [ "setup-lxc" ]
+command = "cargo"
+args = [
+    "test",
+    "-p", "e2e_tests",
 ]

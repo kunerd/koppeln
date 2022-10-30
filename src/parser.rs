@@ -131,7 +131,6 @@ pub fn dns_query(input: &[u8]) -> IResult<&[u8], QueryMessage> {
 
 #[cfg(test)]
 mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::{DnsClass, DnsOpCode, DnsResponseCode, DnsType};
 

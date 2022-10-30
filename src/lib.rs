@@ -11,6 +11,7 @@ mod parser;
 pub mod settings;
 pub mod web;
 
+use bytes::Buf;
 use bytes::{BufMut, BytesMut};
 use std::collections::HashMap;
 use std::io;
@@ -48,7 +49,7 @@ impl From<DnsQr> for u16 {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum DnsOpCode {
     StandardQuery,
     InversQuery,
@@ -78,7 +79,7 @@ impl From<DnsOpCode> for u8 {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum DnsResponseCode {
     NoError,
     FormatError,
@@ -114,7 +115,7 @@ impl From<DnsResponseCode> for u8 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DnsHeader {
     pub id: u16,
     // qr: DnsQr,
@@ -130,20 +131,20 @@ pub struct DnsHeader {
     pub ar_count: u16,
 }
 
-impl From<DnsHeader> for Vec<u8> {
-    fn from(header: DnsHeader) -> Self {
+impl From<&DnsHeader> for Vec<u8> {
+    fn from(header: &DnsHeader) -> Self {
         let mut raw_header = vec![];
 
         raw_header.put_u16(header.id);
 
         let mut flags: u16 = 0;
-        flags |= (u16::from(DnsQr::Response as u16) << 15) & 0b1000000000000000;
+        flags |= (u16::from(DnsQr::Response) << 15) & 0b1000000000000000;
         flags |= (u16::from(u8::from(header.opcode)) << 11) & 0b0111100000000000;
         flags |= ((header.authoritative_anser as u16) << 10) & 0b0000010000000000;
         flags |= ((header.truncated as u16) << 9) & 0b0000001000000000;
         flags |= ((header.recursion_desired as u16) << 8) & 0b0000000100000000;
         flags |= ((header.recursion_available as u16) << 7) & 0b0000000010000000;
-        flags |= (u16::from(u8::from(header.response_code)) << 0) & 0b0000000000001111;
+        flags |= u16::from(u8::from(header.response_code)) & 0b0000000000001111;
         raw_header.put_u16(flags);
         raw_header.put_u16(header.qd_count);
         raw_header.put_u16(header.an_count);
@@ -154,8 +155,8 @@ impl From<DnsHeader> for Vec<u8> {
     }
 }
 
-impl From<DnsQuestion> for Vec<u8> {
-    fn from(question: DnsQuestion) -> Self {
+impl From<&DnsQuestion> for Vec<u8> {
+    fn from(question: &DnsQuestion) -> Self {
         let mut raw: Vec<u8> = question
             .labels
             .iter()
@@ -175,7 +176,7 @@ impl From<DnsQuestion> for Vec<u8> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct DnsQuestion {
     pub labels: Vec<String>,
     pub name: String,
@@ -183,7 +184,7 @@ pub struct DnsQuestion {
     query_class: DnsClass,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum DnsType {
     A,
     NS,
@@ -219,7 +220,7 @@ impl From<DnsType> for u16 {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum DnsClass {
     IN,
     CS,
@@ -320,18 +321,32 @@ impl From<DnsResourceRecord> for Vec<u8> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DnsStandardQuery {
     pub header: DnsHeader,
     pub question: DnsQuestion,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum QueryMessage {
     StandardQuery(DnsStandardQuery),
     InverseQuery,
     Status,
     Reserved(u8),
+}
+
+impl From<&QueryMessage> for Vec<u8> {
+    fn from(msg: &QueryMessage) -> Self {
+        match msg {
+            QueryMessage::StandardQuery(query) => {
+                let mut raw_query: Vec<u8> = vec![];
+                raw_query.append(&mut Into::<Vec<u8>>::into(&query.header));
+                raw_query.append(&mut Into::<Vec<u8>>::into(&query.question));
+                raw_query
+            },
+            _ => panic!("Not implemented")
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -345,8 +360,8 @@ pub struct ResponseMessage {
 
 impl ResponseMessage {
     pub fn as_u8(self) -> Vec<u8> {
-        let mut raw_message: Vec<u8> = self.header.into();
-        let mut raw_question: Vec<u8> = self.question.into();
+        let mut raw_message: Vec<u8> = (&self.header).into();
+        let mut raw_question: Vec<u8> = (&self.question).into();
 
         raw_message.append(&mut raw_question);
 
@@ -360,21 +375,15 @@ impl ResponseMessage {
     }
 }
 
-impl QueryMessage {
-    pub fn from_u8(input: &[u8]) -> Self {
-        // FIXME remove unwrap
-        let (_, query) = parser::dns_query(input).unwrap();
-
-        query
+pub struct DnsMessageCodec(());
+impl DnsMessageCodec { pub fn new() -> Self {
+        DnsMessageCodec(())
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
-pub struct DnsMessageCodec(());
-
-impl DnsMessageCodec {
-    pub fn new() -> Self {
-        DnsMessageCodec(())
+impl Default for DnsMessageCodec {
+    fn default() -> Self {
+        DnsMessageCodec::new()
     }
 }
 
@@ -382,20 +391,29 @@ impl Decoder for DnsMessageCodec {
     type Item = QueryMessage;
     type Error = io::Error;
 
+    // FIXME: needs ot be reafactored
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
         debug!("Unpacking DNS query.");
-        if !buf.is_empty() {
-            let len = buf.len();
-            // if packet is shorter than the header the packet is invalid
-            // move this check into parser
-            if len < 12 {
-                return Err(io::Error::from(io::ErrorKind::Other));
-            }
+        if buf.is_empty() {
+            return Ok(None);
+        }
 
-            let query = QueryMessage::from_u8(&buf);
-            Ok(Some(query))
-        } else {
-            Ok(None)
+        let len = buf.len();
+        if len < 12 {
+            return Ok(None);
+        }
+
+        let res = parser::dns_query(buf);
+        match res {
+            Ok((rem, query)) => {
+                let rem_len = rem.len();
+                buf.advance(len - rem_len);
+                Ok(Some(query))
+            },
+            Err(e) => match e {
+                nom::Err::Incomplete(_) => Ok(None),
+                _ => panic!("Needs to be refactored")
+            }
         }
     }
 }
@@ -408,5 +426,129 @@ impl Encoder<ResponseMessage> for DnsMessageCodec {
         buf.reserve(raw_data.len());
         buf.put(raw_data.as_ref());
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slow_sender() {
+        let mut codec = DnsMessageCodec::new();
+        let mut buf = BytesMut::new();
+
+        let header = DnsHeader {
+            id: 1234,
+            opcode: DnsOpCode::StandardQuery,
+            truncated: false,
+            authoritative_anser: false,
+            recursion_desired: false,
+            recursion_available: false,
+            response_code: DnsResponseCode::NoError,
+            qd_count: 1,
+            an_count: 0,
+            ns_count: 0,
+            ar_count: 0,
+        };
+
+        let header_raw: Vec<u8> = (&header).into();
+        buf.put(&header_raw[0..11]);
+
+        let result = codec.decode(&mut buf);
+        assert_eq!(None, result.unwrap());
+    }
+
+    #[test]
+    fn slow_sender_sends_rest_of_data() {
+        let mut codec = DnsMessageCodec::new();
+        let mut buf = BytesMut::new();
+
+        let header = DnsHeader {
+            id: 1234,
+            opcode: DnsOpCode::StandardQuery,
+            truncated: false,
+            authoritative_anser: false,
+            recursion_desired: false,
+            recursion_available: false,
+            response_code: DnsResponseCode::NoError,
+            qd_count: 1,
+            an_count: 0,
+            ns_count: 0,
+            ar_count: 0,
+        };
+
+        let question = DnsQuestion {
+            labels: vec!["example", "test", "com"].iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+            name: "example.test.com".to_string(),
+            query_type: DnsType::A,
+            query_class: DnsClass::IN,
+        };
+
+        let query = QueryMessage::StandardQuery(
+            DnsStandardQuery {
+                header,
+                question
+            }
+        );
+
+        let header_raw: Vec<u8> = (&query).into();
+
+        buf.put(&header_raw[0..11]);
+        let result = codec.decode(&mut buf);
+        assert_eq!(None, result.unwrap());
+
+        buf.put(&header_raw[11..]);
+        let result = codec.decode(&mut buf);
+        assert_eq!(Some(query), result.unwrap());
+    }
+
+    #[test]
+    fn slow_sender_sends_rest_of_data_incomlete() {
+        let mut codec = DnsMessageCodec::new();
+        let mut buf = BytesMut::new();
+
+        let header = DnsHeader {
+            id: 1234,
+            opcode: DnsOpCode::StandardQuery,
+            truncated: false,
+            authoritative_anser: false,
+            recursion_desired: false,
+            recursion_available: false,
+            response_code: DnsResponseCode::NoError,
+            qd_count: 1,
+            an_count: 0,
+            ns_count: 0,
+            ar_count: 0,
+        };
+
+        let question = DnsQuestion {
+            labels: vec!["example", "test", "com"].iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+            name: "example.test.com".to_string(),
+            query_type: DnsType::A,
+            query_class: DnsClass::IN,
+        };
+
+        let query = QueryMessage::StandardQuery(
+            DnsStandardQuery {
+                header,
+                question
+            }
+        );
+
+        let mut header_raw: Vec<u8> = (&query).into();
+        header_raw.append(&mut header_raw[0..11].to_vec());
+
+        buf.put(&header_raw[0..11]);
+        let result = codec.decode(&mut buf);
+        assert_eq!(None, result.unwrap());
+
+        buf.put(&header_raw[11..21]);
+        let result = codec.decode(&mut buf);
+        assert_eq!(None, result.unwrap());
+
+        buf.put(&header_raw[21..]);
+        let result = codec.decode(&mut buf);
+        assert_eq!(Some(query), result.unwrap());
     }
 }

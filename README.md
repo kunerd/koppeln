@@ -13,44 +13,21 @@ git clone https://github.com/kunerd/koppeln.git
 
 Keep in mind that the current version is only tested to work under the Linux operating system. Building and running it under other OS may or may not work. Anyway, feel free to create an issue, if you encounter any problem during build or while running the server. 
 
-### Build with Cargo
-To build with cargo a version of rust `>=1.47.0` is required. Take a look at [Rust docs](https://doc.rust-lang.org/cargo/getting-started/installation.html) for further information.
-After installing rust and cargo you can build and run the server by the following command:
+## Development
+We use `cargo make` to run advanced build steps like end-to-end testing, packaging .deb files and building in docker containers. Nevertheless, all normal cargo commands should work fine, too.
 
-```
-$ cargo run
-```
+### Run E2E tests
+The E2E test setup is in an early stage and might not work as expected in some circumstances. Please create a ticket if you have any trouble to get the tests to run properly.
 
-This will run the server with the configuration from `config/development.toml` by default. The best way to provide a custom configuration is to create a new file in the `config` repository and set the environment variable `RUN_MODE`.
+Before you can run the E2E tests you need to install the following additional software:
+* docker
+* docker build plugin
+* lxc
+* cargo make
 
+After setting up the additional tools you just need to run:
 ```
-$ cp config/development.toml config/custom.toml
-# adjust custom.toml depending on your needs
-$ RUN_MODE=custom cargo run
-```
-
-### Build with Docker
-To build and run Koppeln via Docker a version of Docker `>=18.09` is required, because we will use the [BuildKit](https://docs.docker.com/develop/develop-images/build_enhancements/). 
-
-To build the image run the following command:
-```
-$ DOCKER_BUILDKIT=1 docker build -t koppeln .
-
-```
-
-To run the server inside a container but accessible from your host use the command below.
-```
-$ docker run \
--v $(pwd)/config:/etc/dyndns/config \
---rm \
--p 8080:80 \
--p 5353:53 \
-koppeln
-```
-
-### Build .deb files
-```
-cargo install --force cargo-make
+$ cargo make e2e-tests
 ```
 
 ### Update a DNS entry
