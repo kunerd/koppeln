@@ -2,7 +2,7 @@ use names::Generator;
 
 pub mod core;
 
-pub  struct TestContainer {
+pub struct TestContainer {
     image_name: String,
 }
 
@@ -11,16 +11,18 @@ impl TestContainer {
         TestContainer { image_name }
     }
 
-    pub fn with<F: FnOnce(&mut core::LxcContainer) -> Result<(), core::LxcContainerError>>(&self, func: F) -> Result<(), core::LxcContainerError> {
+    pub fn with<F: FnOnce(&mut core::LxcContainer) -> Result<(), core::LxcContainerError>>(
+        &self,
+        func: F,
+    ) -> Result<(), core::LxcContainerError> {
         let mut generator = Generator::default();
         let container_name = generator.next().unwrap();
 
         let mut container = core::LxcContainer::launch(&self.image_name, container_name)?;
 
         func(&mut container)?;
-        
+
         container.stop()?;
         container.delete()
     }
 }
-

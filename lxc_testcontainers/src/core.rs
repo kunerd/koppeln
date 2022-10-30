@@ -23,7 +23,7 @@ pub enum LxcContainerError {
     InfoParseError {
         #[from]
         source: serde_json::Error,
-    }
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -33,11 +33,7 @@ pub struct LxcContainer {
 
 impl LxcContainer {
     pub fn launch(image_name: &str, instance_name: String) -> Result<Self, LxcContainerError> {
-        lxc_command(|cmd| {
-            cmd.arg("launch")
-                .arg(image_name)
-                .arg(&instance_name)
-        })?;
+        lxc_command(|cmd| cmd.arg("launch").arg(image_name).arg(&instance_name))?;
 
         Ok(Self {
             name: instance_name,
@@ -45,17 +41,13 @@ impl LxcContainer {
     }
 
     pub fn stop(&self) -> Result<(), LxcContainerError> {
-        lxc_command(|cmd| {
-            cmd.arg("stop").arg(&self.name)
-        })?;
+        lxc_command(|cmd| cmd.arg("stop").arg(&self.name))?;
 
         Ok(())
     }
 
     pub fn delete(&self) -> Result<(), LxcContainerError> {
-        lxc_command(|cmd| {
-            cmd.arg("delete").arg(&self.name)
-        })?;
+        lxc_command(|cmd| cmd.arg("delete").arg(&self.name))?;
 
         Ok(())
     }
@@ -63,8 +55,8 @@ impl LxcContainer {
     pub fn get_info(&self) -> Result<InstanceInfo, LxcContainerError> {
         let output = lxc_command(|cmd| {
             cmd.arg("list")
-            .arg(format!("{}$", self.name)) // $ is used for an exact match
-            .args(["--format", "json"])
+                .arg(format!("{}$", self.name)) // $ is used for an exact match
+                .args(["--format", "json"])
         })?;
 
         let json = String::from_utf8_lossy(&output.stdout);
@@ -76,16 +68,17 @@ impl LxcContainer {
     pub fn get_ips(&self) -> Result<Vec<IpAddr>, LxcContainerError> {
         let output = lxc_command(|cmd| {
             cmd.arg("list")
-            // filtering does not work when --format is json
-            //.arg(format!("{}$", self.name)) // $ is used for an exact match
-            .args(["--format", "json"])
+                // filtering does not work when --format is json
+                //.arg(format!("{}$", self.name)) // $ is used for an exact match
+                .args(["--format", "json"])
         })?;
 
         let json = String::from_utf8(output.stdout).unwrap();
         let instances: Vec<InstanceInfo> = serde_json::from_str(&json).unwrap();
         // filtering does not work when --format is json
         // so we have to filter it in code
-        let instances: Vec<InstanceInfo> = instances.into_iter()
+        let instances: Vec<InstanceInfo> = instances
+            .into_iter()
             .filter(|i| i.name.eq(&self.name))
             .collect();
 
@@ -93,7 +86,8 @@ impl LxcContainer {
             .first()
             .unwrap()
             .state
-            .network.as_ref()
+            .network
+            .as_ref()
             .unwrap()
             .get("eth0")
             .unwrap()
@@ -101,7 +95,10 @@ impl LxcContainer {
             .clone())
     }
 
-    pub fn exec(&self, f: &dyn Fn(&mut Command) -> &mut Command) -> Result<Output, LxcContainerError> {
+    pub fn exec(
+        &self,
+        f: &dyn Fn(&mut Command) -> &mut Command,
+    ) -> Result<Output, LxcContainerError> {
         lxc_command(|cmd| {
             let c = cmd.arg("exec").arg(self.name.clone()).arg("--");
 
@@ -119,9 +116,9 @@ impl LxcContainer {
 
         lxc_command(|cmd| {
             cmd.arg("file")
-            .arg("push")
-            .arg(source_path.as_ref())
-            .arg(container_dest_path.as_os_str())
+                .arg("push")
+                .arg(source_path.as_ref())
+                .arg(container_dest_path.as_os_str())
         })?;
 
         Ok(())
@@ -139,13 +136,11 @@ pub struct InstanceState {
     network: Option<HashMap<String, NetworkAdapter>>,
 }
 
-
 #[derive(PartialEq, Deserialize, Debug)]
 pub struct NetworkAdapter {
     #[serde(deserialize_with = "addresses_object_to_vec")]
     addresses: Vec<IpAddr>,
 }
-
 
 fn addresses_object_to_vec<'de, D>(deserializer: D) -> Result<Vec<IpAddr>, D::Error>
 where
@@ -163,7 +158,6 @@ where
 
     Ok(addresses)
 }
-
 
 fn lxc_command<F: FnOnce(&mut Command) -> &mut Command>(
     func: F,

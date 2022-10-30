@@ -3,10 +3,10 @@ extern crate nom;
 use std::net::Ipv4Addr;
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
-use test_helper::drill::{parse_drill_output, DrillOutput};
+use test_helper::drill::parse_drill_output;
 
 use lxc_testcontainers::core::LxcContainerError;
 use lxc_testcontainers::TestContainer;

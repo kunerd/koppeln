@@ -15,14 +15,17 @@ impl TestContainer {
         TestContainer { image_name }
     }
 
-    pub fn with<F: FnOnce(&mut LxcContainer) -> Result<(), LxcContainerError>>(&self, func: F) -> Result<(), LxcContainerError> {
+    pub fn with<F: FnOnce(&mut LxcContainer) -> Result<(), LxcContainerError>>(
+        &self,
+        func: F,
+    ) -> Result<(), LxcContainerError> {
         let mut generator = Generator::default();
         let container_name = generator.next().unwrap();
 
         let mut container = LxcContainer::launch(&self.image_name, container_name.into())?;
 
         func(&mut container)?;
-        
+
         container.stop()?;
         container.delete()
     }
