@@ -39,14 +39,14 @@ pub struct Settings {
 
 impl Settings {
     pub fn load() -> Result<Self, ConfigError> {
-        let mut c = Config::new();
-
         let env = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
-        c.merge(File::with_name("/etc/koppeln/config.toml").required(false))?;
-        c.merge(File::with_name(&format!("config/{}", env)).required(false))?;
 
-        c.merge(Environment::with_prefix("koppeln"))?;
+        let settings = Config::builder()
+            .add_source(File::with_name("/etc/koppeln/config.toml").required(false))
+            .add_source(File::with_name(&format!("config/{}", env)).required(false))
+            .add_source(Environment::with_prefix("koppeln"))
+            .build()?;
 
-        c.try_into()
+       settings.try_deserialize()
     }
 }
