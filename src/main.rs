@@ -5,12 +5,12 @@ extern crate tokio;
 extern crate tokio_util;
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::net::{SocketAddr, IpAddr};
+use std::sync::{Arc, RwLock};
 
 use env_logger::Env;
-use futures::stream::StreamExt;
-use futures::{FutureExt, SinkExt};
+use futures::stream::{StreamExt, SplitSink, ForEachConcurrent, SplitStream};
+use futures::{Sink, FutureExt, SinkExt, Future};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
@@ -21,6 +21,7 @@ use koppeln::DnsMessageCodec;
 use koppeln::DnsStandardQuery;
 use koppeln::ResponseMessage;
 use koppeln::{
+    AddressStorage,
     DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage,
 };
 
@@ -38,45 +39,56 @@ async fn main() {
         web_server_address,
         storage.clone(),
     ));
+
     info!(
         "HTTP server now listening on: {ip}:{port}",
         ip = settings.web_address,
         port = settings.web_port
     );
 
-    let addr = SocketAddr::from((settings.dns_address, settings.dns_port));
-    let udp_socket = UdpSocket::bind(&addr).await.unwrap();
-    let mut dns_stream = UdpFramed::new(udp_socket, DnsMessageCodec::new());
-
-    info!(
-        "DNS server now listening on: {ip}:{port}",
-        ip = settings.dns_address,
-        port = settings.dns_port
-    );
-
+    let ip = settings.dns_address;
+    let port = settings.dns_port;
     let udp_server = tokio::spawn(async move {
-        loop {
-            debug!("Waiting for DNS queries...");
-            let (query, addr) = dns_stream.next().map(|e| e.unwrap()).await.unwrap();
-
-            debug!("DNS query received: {:?}", query);
-            let response = match query {
-                QueryMessage::StandardQuery(query) => {
-                    let records = storage.lock().await;
-                    handle_standard_query(&records, query)
-                }
-                // FIXME response with not implemented error
-                _ => panic!("Not Implemented"), // TODO: not implemented response
-            };
-
-            debug!("DNS response: {:?}", response);
-            dns_stream.send((response, addr)).await.unwrap();
-        }
+        create_udp_server(ip, port, storage).await;
     });
 
     futures::future::try_join(update_server, udp_server)
         .await
         .unwrap();
+}
+
+async fn create_udp_server(ip: IpAddr, port: u16, storage: AddressStorage) {
+    let addr = SocketAddr::from((ip, port));
+    let udp_socket = UdpSocket::bind(&addr).await.unwrap();
+    let (dns_sink, dns_stream) = UdpFramed::new(udp_socket, DnsMessageCodec::new()).split();
+
+    info!(
+        "DNS server now listening on: {ip}:{port}",
+        ip = ip,
+        port = port 
+    );
+
+    let storage_clone = &storage.clone();
+    dns_stream.for_each_concurrent(100, |result| async move {
+        let (query, addr) = result.unwrap();
+
+        handle_dns_query(query, addr, storage_clone.clone(), dns_sink).await;
+    }).await;
+}
+
+async fn handle_dns_query(query: QueryMessage, addr: SocketAddr, storage: AddressStorage, sink: SplitSink<UdpFramed<DnsMessageCodec>, (ResponseMessage, SockedAddr)>) {
+    debug!("DNS query received: {:?}", query);
+    let response = match query {
+        QueryMessage::StandardQuery(query) => {
+            let records = storage.lock().await;
+            handle_standard_query(&records, query)
+        }
+        // FIXME response with not implemented error
+        _ => panic!("Not Implemented"), // TODO: not implemented response
+    };
+    
+    debug!("DNS response: {:?}", response);
+    sink.send((response, addr)).await.unwrap();
 }
 
 fn handle_standard_query(
