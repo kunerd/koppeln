@@ -52,7 +52,7 @@ fn json_body() -> impl Filter<Extract = (UpdateInfo,), Error = warp::Rejection> 
 }
 
 pub async fn update_address_handler(token: String, update_info: UpdateInfo, storage: AddressStorage) -> Result<impl warp::Reply, Infallible> {
-    let mut addresses = storage.lock().await;
+    let mut addresses = storage.write().await;
     let mut addr = addresses.get_mut(&update_info.hostname).unwrap();
 
     if token != addr.token {

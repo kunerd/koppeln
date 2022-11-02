@@ -5,14 +5,14 @@ extern crate tokio;
 extern crate tokio_util;
 
 use std::collections::HashMap;
-use std::net::{SocketAddr, IpAddr};
-use std::sync::{Arc, RwLock};
+use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
+
+use futures::{StreamExt, SinkExt};
 
 use env_logger::Env;
-use futures::stream::{StreamExt, SplitSink, ForEachConcurrent, SplitStream};
-use futures::{Sink, FutureExt, SinkExt, Future};
 use tokio::net::UdpSocket;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::udp::UdpFramed;
 
 use koppeln::settings::{AddressConfig, Settings};
@@ -21,8 +21,8 @@ use koppeln::DnsMessageCodec;
 use koppeln::DnsStandardQuery;
 use koppeln::ResponseMessage;
 use koppeln::{
-    AddressStorage,
-    DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage,
+    AddressStorage, DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name,
+    QueryMessage,
 };
 
 #[tokio::main]
@@ -32,7 +32,7 @@ async fn main() {
     let settings = Settings::load().expect("Could not load settings.");
     debug!("Settings:\n{:?}", settings);
 
-    let storage = Arc::new(Mutex::new(settings.addresses));
+    let storage = Arc::new(RwLock::new(settings.addresses));
 
     let web_server_address = SocketAddr::from((settings.web_address, settings.web_port));
     let update_server = tokio::spawn(web::create_update_server(
@@ -49,7 +49,7 @@ async fn main() {
     let ip = settings.dns_address;
     let port = settings.dns_port;
     let udp_server = tokio::spawn(async move {
-        create_udp_server(ip, port, storage).await;
+        create_udp_server(ip, port, &storage).await;
     });
 
     futures::future::try_join(update_server, udp_server)
@@ -57,7 +57,7 @@ async fn main() {
         .unwrap();
 }
 
-async fn create_udp_server(ip: IpAddr, port: u16, storage: AddressStorage) {
+async fn create_udp_server(ip: IpAddr, port: u16, storage: &AddressStorage) {
     let addr = SocketAddr::from((ip, port));
     let udp_socket = UdpSocket::bind(&addr).await.unwrap();
     let (dns_sink, dns_stream) = UdpFramed::new(udp_socket, DnsMessageCodec::new()).split();
@@ -65,30 +65,31 @@ async fn create_udp_server(ip: IpAddr, port: u16, storage: AddressStorage) {
     info!(
         "DNS server now listening on: {ip}:{port}",
         ip = ip,
-        port = port 
+        port = port
     );
 
-    let storage_clone = &storage.clone();
-    dns_stream.for_each_concurrent(100, |result| async move {
-        let (query, addr) = result.unwrap();
+    let sink = &Arc::new(Mutex::new(dns_sink));
+    dns_stream
+        .for_each_concurrent(100, |result| async move {
+            let (query, addr) = result.unwrap();
 
-        handle_dns_query(query, addr, storage_clone.clone(), dns_sink).await;
-    }).await;
-}
+            //handle_dns_query(query, addr, storage_clone.clone(), sink) .await;
+            debug!("DNS query received: {:?}", query);
+            let response = match query {
+                QueryMessage::StandardQuery(query) => {
+                    //let records = storage.lock().await;
+                    let records = storage.read().await;
+                    handle_standard_query(&records, query)
+                }
+                // FIXME response with not implemented error
+                _ => panic!("Not Implemented"), // TODO: not implemented response
+            };
 
-async fn handle_dns_query(query: QueryMessage, addr: SocketAddr, storage: AddressStorage, sink: SplitSink<UdpFramed<DnsMessageCodec>, (ResponseMessage, SockedAddr)>) {
-    debug!("DNS query received: {:?}", query);
-    let response = match query {
-        QueryMessage::StandardQuery(query) => {
-            let records = storage.lock().await;
-            handle_standard_query(&records, query)
-        }
-        // FIXME response with not implemented error
-        _ => panic!("Not Implemented"), // TODO: not implemented response
-    };
-    
-    debug!("DNS response: {:?}", response);
-    sink.send((response, addr)).await.unwrap();
+            debug!("DNS response: {:?}", response);
+            let mut sink = sink.lock().await;
+            sink.send((response, addr)).await.unwrap();
+        })
+        .await;
 }
 
 fn handle_standard_query(

@@ -18,11 +18,11 @@ use std::io;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Encoder;
 
-pub type AddressStorage = Arc<Mutex<HashMap<String, settings::AddressConfig>>>;
+pub type AddressStorage = Arc<RwLock<HashMap<String, settings::AddressConfig>>>;
 
 #[derive(Debug)]
 pub enum DnsQr {
