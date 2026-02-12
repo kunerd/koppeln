@@ -343,8 +343,8 @@ impl From<&QueryMessage> for Vec<u8> {
                 raw_query.append(&mut Into::<Vec<u8>>::into(&query.header));
                 raw_query.append(&mut Into::<Vec<u8>>::into(&query.question));
                 raw_query
-            },
-            _ => panic!("Not implemented")
+            }
+            _ => panic!("Not implemented"),
         }
     }
 }
@@ -376,7 +376,8 @@ impl ResponseMessage {
 }
 
 pub struct DnsMessageCodec(());
-impl DnsMessageCodec { pub fn new() -> Self {
+impl DnsMessageCodec {
+    pub fn new() -> Self {
         DnsMessageCodec(())
     }
 }
@@ -409,11 +410,11 @@ impl Decoder for DnsMessageCodec {
                 let rem_len = rem.len();
                 buf.advance(len - rem_len);
                 Ok(Some(query))
-            },
+            }
             Err(e) => match e {
                 nom::Err::Incomplete(_) => Ok(None),
-                _ => panic!("Needs to be refactored")
-            }
+                _ => panic!("Needs to be refactored"),
+            },
         }
     }
 }
@@ -479,18 +480,16 @@ mod tests {
         };
 
         let question = DnsQuestion {
-            labels: vec!["example", "test", "com"].iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+            labels: vec!["example", "test", "com"]
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>(),
             name: "example.test.com".to_string(),
             query_type: DnsType::A,
             query_class: DnsClass::IN,
         };
 
-        let query = QueryMessage::StandardQuery(
-            DnsStandardQuery {
-                header,
-                question
-            }
-        );
+        let query = QueryMessage::StandardQuery(DnsStandardQuery { header, question });
 
         let header_raw: Vec<u8> = (&query).into();
 
@@ -523,18 +522,16 @@ mod tests {
         };
 
         let question = DnsQuestion {
-            labels: vec!["example", "test", "com"].iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+            labels: vec!["example", "test", "com"]
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>(),
             name: "example.test.com".to_string(),
             query_type: DnsType::A,
             query_class: DnsClass::IN,
         };
 
-        let query = QueryMessage::StandardQuery(
-            DnsStandardQuery {
-                header,
-                question
-            }
-        );
+        let query = QueryMessage::StandardQuery(DnsStandardQuery { header, question });
 
         let mut header_raw: Vec<u8> = (&query).into();
         header_raw.append(&mut header_raw[0..11].to_vec());
