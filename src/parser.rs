@@ -1,39 +1,44 @@
-use crate::QueryMessage;
 use crate::DnsOpCode;
 use crate::DnsStandardQuery;
+use crate::QueryMessage;
 use std::str;
 
+use nom::Parser;
 use nom::{
     bits::{bits, complete::take},
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric1, char},
     combinator::{all_consuming, map, map_res, peek, recognize},
-    multi::{length_value, many_till, separated_list},
+    multi::{length_value, many_till, separated_list0},
     number::complete::{be_u16, be_u8},
-    sequence::{pair, tuple},
+    sequence::pair,
     IResult,
 };
 
 use super::{DnsHeader, DnsQuestion};
 
 fn take_one_bit((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    let take_one = take::<_, u8, _, (_, _)>(1usize);
+    let take_one = take(1usize);
 
     take_one((input, offset))
 }
 
+fn take_three_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
+    let take_three = take(3usize);
+
+    take_three((input, offset))
+}
+
 fn take_four_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    let take_four = take::<_, u8, _, (_, _)>(4usize);
+    let take_four = take(4usize);
 
     take_four((input, offset))
 }
 
 pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
-    let take_three_bits = take::<_, u8, _, (_, _)>(3usize);
-
-    let parser = tuple((
+    let mut parser = (
         be_u16,
-        bits(tuple((
+        bits((
             take_one_bit,
             take_four_bits,
             take_one_bit,
@@ -42,14 +47,15 @@ pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
             take_one_bit,
             take_three_bits,
             take_four_bits,
-        ))),
+        )),
         be_u16,
         be_u16,
         be_u16,
         be_u16,
-    ));
+    );
 
-    let (input, (id, (_, opcode, _, tc, rd, ra, _, rcode), qd_count, _, _, _)) = parser(input)?;
+    let (input, (id, (_, opcode, _, tc, rd, ra, _, rcode), qd_count, _, _, _)) =
+        parser.parse(input)?;
 
     Ok((
         input,
@@ -72,32 +78,37 @@ pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
 /// Implemented as described in [RFC 1035](https://tools.ietf.org/html/rfc1035#section-2.3.1)
 fn dns_label(input: &[u8]) -> IResult<&[u8], String> {
     // TODO: add support for message compression as desribed in https://tools.ietf.org/html/rfc1035#section-4.1.4
-    let (rem, label) = map(
+    let mut parser = map(
         map_res(
             length_value(
                 be_u8,
                 all_consuming(recognize(pair(
                     peek(alpha1), // a label must start with an ASCII letter
-                    separated_list(char('-'), alphanumeric1),
+                    separated_list0(char('-'), alphanumeric1),
                 ))),
             ),
             str::from_utf8,
         ),
         |s| s.to_owned(),
-    )(input)?;
+    );
+
+    let (rem, label) = parser.parse(input)?;
 
     Ok((rem, label))
 }
 
 fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
-    let (rem, (labels, _)) = many_till(dns_label, tag("\0"))(input)?;
+    let mut parser = many_till(dns_label, tag("\0"));
+
+    let (rem, (labels, _)) = parser.parse(input)?;
 
     Ok((rem, labels))
 }
 
 fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
-    let parser = tuple((dns_labels, be_u16, be_u16));
-    let (rem, (labels, qtype, qclass)) = parser(input)?;
+    let mut parser = (dns_labels, be_u16, be_u16);
+
+    let (rem, (labels, qtype, qclass)) = parser.parse(input)?;
     let name = labels.join(".");
 
     Ok((
@@ -111,19 +122,21 @@ fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
     ))
 }
 
-
 pub fn dns_query(input: &[u8]) -> IResult<&[u8], QueryMessage> {
     let (input, header) = dns_header(input)?;
 
     let (input, query) = match header.opcode {
         DnsOpCode::StandardQuery => {
             let (input, question) = dns_question(input)?;
-            (input, QueryMessage::StandardQuery( DnsStandardQuery{ header, question } ))
-        },
+            (
+                input,
+                QueryMessage::StandardQuery(DnsStandardQuery { header, question }),
+            )
+        }
         // TODO parse these formats too
         DnsOpCode::InversQuery => (input, QueryMessage::InverseQuery),
         DnsOpCode::ServerStatusRequest => (input, QueryMessage::Status),
-        DnsOpCode::Reserved(value) => (input, QueryMessage::Reserved(value))
+        DnsOpCode::Reserved(value) => (input, QueryMessage::Reserved(value)),
     };
 
     Ok((input, query))

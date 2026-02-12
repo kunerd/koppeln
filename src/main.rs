@@ -9,9 +9,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use env_logger::Env;
+use futures::stream::StreamExt;
 use futures::{FutureExt, SinkExt};
 use tokio::net::UdpSocket;
-use futures::stream::StreamExt;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
 
@@ -73,7 +73,9 @@ async fn main() {
         }
     });
 
-    futures::future::try_join(update_server, udp_server).await.unwrap();
+    futures::future::try_join(update_server, udp_server)
+        .await
+        .unwrap();
 }
 
 fn handle_standard_query(
