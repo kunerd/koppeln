@@ -15,7 +15,11 @@ pub struct UpdateInfo {
 }
 
 pub async fn create_update_server(address: SocketAddr, storage: AddressStorage) {
-    warp::serve(update_address(storage)).bind(address).await;
+    warp::serve(update_address(storage))
+        .bind(address)
+        .await
+        .run()
+        .await;
 }
 
 pub fn update_address(

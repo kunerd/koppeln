@@ -154,15 +154,25 @@ mod tests {
         let (_, header) = dns_header(raw_header).unwrap();
 
         assert_eq!(header.id, 26355);
-        assert_eq!(header.opcode, DnsOpCode::StandardQuery);
     }
 
     #[test]
     fn test_parse_opcode() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
-
+        let raw_header = b"\x66\xf3\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00";
         let (_, header) = dns_header(raw_header).unwrap();
         assert_eq!(header.opcode, DnsOpCode::StandardQuery);
+
+        let raw_header = b"\x66\xf3\x0a\x00\x00\x01\x00\x00\x00\x00\x00\x00";
+        let (_, header) = dns_header(raw_header).unwrap();
+        assert_eq!(header.opcode, DnsOpCode::InversQuery);
+
+        let raw_header = b"\x66\xf3\x10\x00\x00\x01\x00\x00\x00\x00\x00\x00";
+        let (_, header) = dns_header(raw_header).unwrap();
+        assert_eq!(header.opcode, DnsOpCode::ServerStatusRequest);
+
+        let raw_header = b"\x66\xf3\x28\x00\x00\x01\x00\x00\x00\x00\x00\x00";
+        let (_, header) = dns_header(raw_header).unwrap();
+        assert_eq!(header.opcode, DnsOpCode::Reserved(5));
     }
 
     #[test]
