@@ -38,7 +38,6 @@ async fn main() {
         web_server_address,
         storage.clone(),
     ));
-
     info!(
         "HTTP server now listening on: {ip}:{port}",
         ip = settings.web_address,
@@ -59,6 +58,7 @@ async fn main() {
         loop {
             debug!("Waiting for DNS queries...");
             let (query, addr) = dns_stream.next().map(|e| e.unwrap()).await.unwrap();
+
             debug!("DNS query received: {:?}", query);
             let response = match query {
                 QueryMessage::StandardQuery(query) => {
