@@ -6,7 +6,7 @@ members = [
 
 [package]
 name = "koppeln"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Hendrik Kunert <hendrik.kunert@gmail.com>"]
 edition = "2018"
 
@@ -22,10 +22,13 @@ serde = { version = "1.0", features = ["derive"] }
 config = "0.15"
 log = "0.4"
 env_logger = "0.11.9"
-warp = "0.3"
 futures = "0.3"
 tokio = { version = "1.2", features = ["full"] }
 tokio-util = { version = "0.6.3", features = ["net", "codec"] }
+
+[dependencies.warp]
+version = "0.4"
+features = [ "server" ]
 
 [package.metadata.deb]
 section = "net"
