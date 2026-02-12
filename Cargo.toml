@@ -6,7 +6,7 @@ members = [
 
 [package]
 name = "koppeln"
-version = "0.2.0"
+version = "0.3.0-dev"
 authors = ["Hendrik Kunert <hendrik.kunert@gmail.com>"]
 edition = "2018"
 
