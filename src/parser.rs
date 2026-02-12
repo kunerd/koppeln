@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_parse_id() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
+        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
 
@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_parse_opcode() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
+        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
         assert_eq!(header.opcode, DnsOpCode::StandardQuery);
@@ -167,31 +167,31 @@ mod tests {
 
     #[test]
     fn test_parse_tc() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
+        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.truncated, false);
+        assert!(!header.truncated);
     }
 
     #[test]
     fn test_parse_rd() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
+        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.recursion_desired, true);
+        assert!(header.recursion_desired);
     }
 
     #[test]
     fn test_parse_ra() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
+        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.recursion_available, false);
+        assert!(!header.recursion_available);
     }
 
     #[test]
     fn test_parse_rcode() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
+        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
         assert_eq!(header.response_code, DnsResponseCode::NoError);
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn test_parse_qd_count() {
-        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\00\x00";
+        let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
         assert_eq!(header.qd_count, 1);

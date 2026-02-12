@@ -480,7 +480,7 @@ mod tests {
         };
 
         let question = DnsQuestion {
-            labels: vec!["example", "test", "com"]
+            labels: ["example", "test", "com"]
                 .iter()
                 .map(|n| n.to_string())
                 .collect::<Vec<_>>(),
@@ -522,7 +522,7 @@ mod tests {
         };
 
         let question = DnsQuestion {
-            labels: vec!["example", "test", "com"]
+            labels: ["example", "test", "com"]
                 .iter()
                 .map(|n| n.to_string())
                 .collect::<Vec<_>>(),

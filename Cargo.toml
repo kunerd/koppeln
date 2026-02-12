@@ -30,7 +30,7 @@ features = [ "server" ]
 
 [dependencies.tokio]
 version = "1.49"
-default_features = false
+default-features = false
 features = ["macros", "rt-multi-thread"]
 
 [dependencies.tokio-util]
