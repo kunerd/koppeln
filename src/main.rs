@@ -38,6 +38,7 @@ async fn main() {
         web_server_address,
         storage.clone(),
     ));
+
     info!(
         "HTTP server now listening on: {ip}:{port}",
         ip = settings.web_address,

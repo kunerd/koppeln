@@ -1,5 +1,4 @@
 use std::convert::Infallible;
-use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 
 use serde::Deserialize;
@@ -15,11 +14,8 @@ pub struct UpdateInfo {
     pub ip: IpAddr,
 }
 
-pub fn create_update_server(
-    address: SocketAddr,
-    storage: AddressStorage,
-) -> impl Future<Output = ()> + 'static {
-    warp::serve(update_address(storage)).bind(address)
+pub async fn create_update_server(address: SocketAddr, storage: AddressStorage) {
+    warp::serve(update_address(storage)).bind(address).await;
 }
 
 pub fn update_address(
