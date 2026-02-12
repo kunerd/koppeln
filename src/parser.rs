@@ -8,7 +8,7 @@ use nom::{
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric1, char},
     combinator::{all_consuming, map, map_res, peek, recognize},
-    multi::{length_value, many_till, separated_list0},
+    multi::{length_value, many_till, separated_list},
     number::complete::{be_u16, be_u8},
     sequence::{pair, tuple},
     IResult,
@@ -16,18 +16,22 @@ use nom::{
 
 use super::{DnsHeader, DnsQuestion};
 
-fn take_one_bit(input: (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    take(1usize)(input)
+fn take_one_bit((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
+    let take_one = take::<_, u8, _, (_, _)>(1usize);
+
+    take_one((input, offset))
 }
 
-fn take_four_bits(input: (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    take(4usize)(input)
+fn take_four_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
+    let take_four = take::<_, u8, _, (_, _)>(4usize);
+
+    take_four((input, offset))
 }
 
 pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
-    let take_three_bits = take::<_,u8,_,_>(3usize);
+    let take_three_bits = take::<_, u8, _, (_, _)>(3usize);
 
-    let mut parser = tuple((
+    let parser = tuple((
         be_u16,
         bits(tuple((
             take_one_bit,
@@ -74,7 +78,7 @@ fn dns_label(input: &[u8]) -> IResult<&[u8], String> {
                 be_u8,
                 all_consuming(recognize(pair(
                     peek(alpha1), // a label must start with an ASCII letter
-                    separated_list0(char('-'), alphanumeric1),
+                    separated_list(char('-'), alphanumeric1),
                 ))),
             ),
             str::from_utf8,
@@ -92,7 +96,7 @@ fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
 }
 
 fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
-    let mut parser = tuple((dns_labels, be_u16, be_u16));
+    let parser = tuple((dns_labels, be_u16, be_u16));
     let (rem, (labels, qtype, qclass)) = parser(input)?;
     let name = labels.join(".");
 
