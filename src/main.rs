@@ -9,9 +9,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use env_logger::Env;
-use futures::stream::StreamExt;
 use futures::{FutureExt, SinkExt};
 use tokio::net::UdpSocket;
+use futures::stream::StreamExt;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
 
@@ -26,7 +26,7 @@ use koppeln::{
 
 #[tokio::main]
 async fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    env_logger::from_env(Env::default().default_filter_or("info")).init();
 
     let settings = Settings::load().expect("Could not load settings.");
     debug!("Settings:\n{:?}", settings);
@@ -58,7 +58,6 @@ async fn main() {
         loop {
             debug!("Waiting for DNS queries...");
             let (query, addr) = dns_stream.next().map(|e| e.unwrap()).await.unwrap();
-
             debug!("DNS query received: {:?}", query);
             let response = match query {
                 QueryMessage::StandardQuery(query) => {
@@ -74,15 +73,15 @@ async fn main() {
         }
     });
 
-    futures::future::try_join(update_server, udp_server)
-        .await
-        .unwrap();
+    futures::future::try_join(update_server, udp_server).await.unwrap();
 }
 
 fn handle_standard_query(
     records: &HashMap<String, AddressConfig>,
     query: DnsStandardQuery,
 ) -> ResponseMessage {
+    let record = records.get(&query.question.name);
+
     let mut header = DnsHeader {
         //qr: DnsQr::Respons,
         authoritative_anser: true,
@@ -93,7 +92,6 @@ fn handle_standard_query(
         ..query.header
     };
 
-    let record = records.get(&query.question.name);
     if let Some(address) = record {
         if let Some(ip) = address.ipv4 {
             header.an_count = 1;
