@@ -17,11 +17,11 @@ path = "src/lib.rs"
 [dependencies]
 bytes = "1.11.1"
 nom = "8.0"
-toml = "0.5.6"
+toml = "1.0.1"
 serde = { version = "1.0", features = ["derive"] }
-config = "0.9"
+config = "0.15"
 log = "0.4"
-env_logger = "0.7.1"
+env_logger = "0.11.9"
 warp = "0.3"
 futures = "0.3"
 tokio = { version = "1.2", features = ["full"] }
