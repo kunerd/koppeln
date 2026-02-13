@@ -10,19 +10,17 @@ use std::sync::Arc;
 
 use env_logger::Env;
 use futures::stream::StreamExt;
-use futures::{FutureExt, SinkExt};
+use futures::SinkExt;
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
 
 use koppeln::settings::{AddressConfig, Settings};
-use koppeln::web;
 use koppeln::DnsMessageCodec;
 use koppeln::DnsStandardQuery;
 use koppeln::ResponseMessage;
-use koppeln::{
-    DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name, QueryMessage,
-};
+use koppeln::{web, DnsQuestion};
+use koppeln::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name};
 
 #[tokio::main]
 async fn main() {
@@ -46,7 +44,7 @@ async fn main() {
 
     let addr = SocketAddr::from((settings.dns_address, settings.dns_port));
     let udp_socket = UdpSocket::bind(&addr).await.unwrap();
-    let mut dns_stream = UdpFramed::new(udp_socket, DnsMessageCodec::new());
+    let mut dns_stream = UdpFramed::new(udp_socket, DnsMessageCodec::default());
 
     info!(
         "DNS server now listening on: {ip}:{port}",
@@ -55,18 +53,25 @@ async fn main() {
     );
 
     let udp_server = tokio::spawn(async move {
-        loop {
-            debug!("Waiting for DNS queries...");
-            let (query, addr) = dns_stream.next().map(|e| e.unwrap()).await.unwrap();
+        debug!("Waiting for DNS queries...");
+        while let Some(res) = dns_stream.next().await {
+            let (query, addr) = match res {
+                Ok((query, addr)) => (query, addr),
+                Err(err) => {
+                    log::error!("{err}");
+                    continue;
+                }
+            };
+            debug!("DNS message received: {:?}", query);
 
-            debug!("DNS query received: {:?}", query);
             let response = match query {
-                QueryMessage::StandardQuery(query) => {
+                koppeln::Message::Query(query) => {
                     let records = storage.lock().await;
                     handle_standard_query(&records, query)
                 }
-                // FIXME response with not implemented error
-                _ => panic!("Not Implemented"), // TODO: not implemented response
+                koppeln::Message::Unsupported(header, question) => {
+                    heandle_unsupported(header, question)
+                }
             };
 
             debug!("DNS response: {:?}", response);
@@ -77,6 +82,22 @@ async fn main() {
     futures::future::try_join(update_server, udp_server)
         .await
         .unwrap();
+}
+
+fn heandle_unsupported(header: DnsHeader, question: DnsQuestion) -> ResponseMessage {
+    let header = DnsHeader {
+        authoritative_anser: true,
+        truncated: false,
+        recursion_available: false,
+        an_count: 0,
+        response_code: DnsResponseCode::NotImplemented,
+        ..header
+    };
+    ResponseMessage {
+        header,
+        question: question,
+        answer: vec![],
+    }
 }
 
 fn handle_standard_query(

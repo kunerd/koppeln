@@ -1,6 +1,5 @@
 use crate::DnsOpCode;
 use crate::DnsStandardQuery;
-use crate::QueryMessage;
 use std::str;
 
 use nom::Parser;
@@ -17,22 +16,44 @@ use nom::{
 
 use super::{DnsHeader, DnsQuestion};
 
-fn take_one_bit((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    let take_one = take(1usize);
-
-    take_one((input, offset))
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("not a standard query")]
+    NoStdQuery(DnsHeader, DnsQuestion),
+    #[error("not enough data")]
+    Incomplete,
+    #[error("failed to parse payload")]
+    Parser,
 }
 
-fn take_three_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    let take_three = take(3usize);
-
-    take_three((input, offset))
+impl<F> From<nom::Err<F>> for Error {
+    fn from(err: nom::Err<F>) -> Self {
+        match err {
+            nom::Err::Incomplete(_) => Error::Incomplete,
+            _ => Error::Parser,
+        }
+    }
 }
 
-fn take_four_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
-    let take_four = take(4usize);
+pub fn dns_query(input: &[u8]) -> Result<(usize, DnsStandardQuery), Error> {
+    let start_len = input.len();
 
-    take_four((input, offset))
+    let (rem, header) = dns_header(input)?;
+    let (rem, question) = dns_question(rem)?;
+
+    if header.opcode != DnsOpCode::StandardQuery {
+        return Err(Error::NoStdQuery(header, question));
+    };
+
+    // TODO: treat question with qdcount > 1 as format error (code 1) according to:
+    // https://www.rfc-editor.org/rfc/rfc9619#name-updates-to-rfc-1035
+
+    // TODO DNS messages are restricted to 512 bytes, it this limit is
+    // exceeded the messages should be truncated and the TC bit must be
+    // set in the header
+
+    let consumed = start_len - rem.len();
+    Ok((consumed, DnsStandardQuery { header, question }))
 }
 
 pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
@@ -74,6 +95,30 @@ pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
         },
     ))
 }
+pub fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
+    let mut parser = (dns_labels, be_u16, be_u16);
+
+    let (rem, (labels, qtype, qclass)) = parser.parse(input)?;
+    let name = labels.join(".");
+
+    Ok((
+        rem,
+        DnsQuestion {
+            labels,
+            name,
+            query_type: qtype.into(),
+            query_class: qclass.into(),
+        },
+    ))
+}
+
+fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
+    let mut parser = many_till(dns_label, tag("\0"));
+
+    let (rem, (labels, _)) = parser.parse(input)?;
+
+    Ok((rem, labels))
+}
 
 /// Implemented as described in [RFC 1035](https://tools.ietf.org/html/rfc1035#section-2.3.1)
 fn dns_label(input: &[u8]) -> IResult<&[u8], String> {
@@ -97,49 +142,22 @@ fn dns_label(input: &[u8]) -> IResult<&[u8], String> {
     Ok((rem, label))
 }
 
-fn dns_labels(input: &[u8]) -> IResult<&[u8], Vec<String>> {
-    let mut parser = many_till(dns_label, tag("\0"));
+fn take_one_bit((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
+    let take_one = take(1usize);
 
-    let (rem, (labels, _)) = parser.parse(input)?;
-
-    Ok((rem, labels))
+    take_one((input, offset))
 }
 
-fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
-    let mut parser = (dns_labels, be_u16, be_u16);
+fn take_three_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
+    let take_three = take(3usize);
 
-    let (rem, (labels, qtype, qclass)) = parser.parse(input)?;
-    let name = labels.join(".");
-
-    Ok((
-        rem,
-        DnsQuestion {
-            labels,
-            name,
-            query_type: qtype.into(),
-            query_class: qclass.into(),
-        },
-    ))
+    take_three((input, offset))
 }
 
-pub fn dns_query(input: &[u8]) -> IResult<&[u8], QueryMessage> {
-    let (input, header) = dns_header(input)?;
+fn take_four_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8> {
+    let take_four = take(4usize);
 
-    let (input, query) = match header.opcode {
-        DnsOpCode::StandardQuery => {
-            let (input, question) = dns_question(input)?;
-            (
-                input,
-                QueryMessage::StandardQuery(DnsStandardQuery { header, question }),
-            )
-        }
-        // TODO parse these formats too
-        DnsOpCode::InversQuery => (input, QueryMessage::InverseQuery),
-        DnsOpCode::ServerStatusRequest => (input, QueryMessage::Status),
-        DnsOpCode::Reserved(value) => (input, QueryMessage::Reserved(value)),
-    };
-
-    Ok((input, query))
+    take_four((input, offset))
 }
 
 #[cfg(test)]

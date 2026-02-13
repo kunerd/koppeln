@@ -1,12 +1,3 @@
-extern crate config;
-extern crate nom;
-extern crate serde;
-extern crate tokio;
-extern crate tokio_util;
-extern crate toml;
-#[macro_use]
-extern crate log;
-
 mod parser;
 pub mod settings;
 pub mod web;
@@ -49,7 +40,7 @@ impl From<DnsQr> for u16 {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DnsOpCode {
     StandardQuery,
     InversQuery,
@@ -115,7 +106,7 @@ impl From<DnsResponseCode> for u8 {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DnsHeader {
     pub id: u16,
     // qr: DnsQr,
@@ -176,7 +167,7 @@ impl From<&DnsQuestion> for Vec<u8> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DnsQuestion {
     pub labels: Vec<String>,
     pub name: String,
@@ -321,31 +312,18 @@ impl From<DnsResourceRecord> for Vec<u8> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DnsStandardQuery {
     pub header: DnsHeader,
     pub question: DnsQuestion,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum QueryMessage {
-    StandardQuery(DnsStandardQuery),
-    InverseQuery,
-    Status,
-    Reserved(u8),
-}
-
-impl From<&QueryMessage> for Vec<u8> {
-    fn from(msg: &QueryMessage) -> Self {
-        match msg {
-            QueryMessage::StandardQuery(query) => {
-                let mut raw_query: Vec<u8> = vec![];
-                raw_query.append(&mut Into::<Vec<u8>>::into(&query.header));
-                raw_query.append(&mut Into::<Vec<u8>>::into(&query.question));
-                raw_query
-            }
-            _ => panic!("Not implemented"),
-        }
+impl From<&DnsStandardQuery> for Vec<u8> {
+    fn from(query: &DnsStandardQuery) -> Self {
+        let mut raw_query: Vec<u8> = vec![];
+        raw_query.append(&mut Into::<Vec<u8>>::into(&query.header));
+        raw_query.append(&mut Into::<Vec<u8>>::into(&query.question));
+        raw_query
     }
 }
 
@@ -375,47 +353,55 @@ impl ResponseMessage {
     }
 }
 
-pub struct DnsMessageCodec(());
-impl DnsMessageCodec {
-    pub fn new() -> Self {
-        DnsMessageCodec(())
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub enum Message {
+    Query(DnsStandardQuery),
+    Unsupported(DnsHeader, DnsQuestion),
 }
 
-impl Default for DnsMessageCodec {
-    fn default() -> Self {
-        DnsMessageCodec::new()
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("failed to decode DNS message")]
+    Decoding,
 }
+
+#[derive(Default)]
+pub struct DnsMessageCodec;
 
 impl Decoder for DnsMessageCodec {
-    type Item = QueryMessage;
-    type Error = io::Error;
+    type Item = Message;
+    type Error = Error;
 
-    // FIXME: needs ot be reafactored
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
-        debug!("Unpacking DNS query.");
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        log::debug!("Unpacking DNS query.");
         if buf.is_empty() {
             return Ok(None);
         }
 
         let len = buf.len();
         if len < 12 {
+            // not a enough data for a valid header
             return Ok(None);
         }
 
-        let res = parser::dns_query(buf);
-        match res {
-            Ok((rem, query)) => {
-                let rem_len = rem.len();
-                buf.advance(len - rem_len);
-                Ok(Some(query))
+        let msg = match parser::dns_query(buf) {
+            Ok((consumed, query)) => {
+                buf.advance(consumed);
+
+                Message::Query(query)
             }
-            Err(e) => match e {
-                nom::Err::Incomplete(_) => Ok(None),
-                _ => panic!("Needs to be refactored"),
+            Err(err) => match err {
+                parser::Error::NoStdQuery(header, question) => {
+                    Message::Unsupported(header, question)
+                }
+                parser::Error::Incomplete => return Ok(None),
+                parser::Error::Parser => return Err(Error::Decoding),
             },
-        }
+        };
+
+        Ok(Some(msg))
     }
 }
 
@@ -436,7 +422,7 @@ mod tests {
 
     #[test]
     fn slow_sender() {
-        let mut codec = DnsMessageCodec::new();
+        let mut codec = DnsMessageCodec::default();
         let mut buf = BytesMut::new();
 
         let header = DnsHeader {
@@ -462,7 +448,7 @@ mod tests {
 
     #[test]
     fn slow_sender_sends_rest_of_data() {
-        let mut codec = DnsMessageCodec::new();
+        let mut codec = DnsMessageCodec::default();
         let mut buf = BytesMut::new();
 
         let header = DnsHeader {
@@ -489,7 +475,7 @@ mod tests {
             query_class: DnsClass::IN,
         };
 
-        let query = QueryMessage::StandardQuery(DnsStandardQuery { header, question });
+        let query = DnsStandardQuery { header, question };
 
         let header_raw: Vec<u8> = (&query).into();
 
@@ -499,12 +485,12 @@ mod tests {
 
         buf.put(&header_raw[11..]);
         let result = codec.decode(&mut buf);
-        assert_eq!(Some(query), result.unwrap());
+        assert_eq!(Some(Message::Query(query)), result.unwrap());
     }
 
     #[test]
     fn slow_sender_sends_rest_of_data_incomlete() {
-        let mut codec = DnsMessageCodec::new();
+        let mut codec = DnsMessageCodec::default();
         let mut buf = BytesMut::new();
 
         let header = DnsHeader {
@@ -531,7 +517,7 @@ mod tests {
             query_class: DnsClass::IN,
         };
 
-        let query = QueryMessage::StandardQuery(DnsStandardQuery { header, question });
+        let query = DnsStandardQuery { header, question };
 
         let mut header_raw: Vec<u8> = (&query).into();
         header_raw.append(&mut header_raw[0..11].to_vec());
@@ -546,6 +532,6 @@ mod tests {
 
         buf.put(&header_raw[21..]);
         let result = codec.decode(&mut buf);
-        assert_eq!(Some(query), result.unwrap());
+        assert_eq!(Some(Message::Query(query)), result.unwrap());
     }
 }
