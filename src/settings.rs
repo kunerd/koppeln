@@ -5,7 +5,7 @@ use std::net;
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AddressConfig {
     #[serde(skip)]
     pub ipv4: Option<net::Ipv4Addr>,
@@ -27,7 +27,7 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub dns_address: net::IpAddr,

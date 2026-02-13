@@ -16,11 +16,11 @@ use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
 
 use koppeln::settings::{AddressConfig, Settings};
-use koppeln::DnsMessageCodec;
-use koppeln::DnsStandardQuery;
+use koppeln::web;
 use koppeln::ResponseMessage;
-use koppeln::{web, DnsQuestion};
 use koppeln::{DnsClass, DnsHeader, DnsResourceRecord, DnsResponseCode, DnsType, Name};
+use koppeln::{DnsMessageCodec, NotImplementedResponse};
+use koppeln::{DnsStandardQuery, Response};
 
 #[tokio::main]
 async fn main() {
@@ -69,8 +69,8 @@ async fn main() {
                     let records = storage.lock().await;
                     handle_standard_query(&records, query)
                 }
-                koppeln::Message::Unsupported(header, question) => {
-                    heandle_unsupported(header, question)
+                koppeln::Message::Unsupported(header, payload) => {
+                    heandle_unsupported(header, payload)
                 }
             };
 
@@ -84,7 +84,7 @@ async fn main() {
         .unwrap();
 }
 
-fn heandle_unsupported(header: DnsHeader, question: DnsQuestion) -> ResponseMessage {
+fn heandle_unsupported(header: DnsHeader, payload: Vec<u8>) -> Response {
     let header = DnsHeader {
         authoritative_anser: true,
         truncated: false,
@@ -93,17 +93,13 @@ fn heandle_unsupported(header: DnsHeader, question: DnsQuestion) -> ResponseMess
         response_code: DnsResponseCode::NotImplemented,
         ..header
     };
-    ResponseMessage {
-        header,
-        question: question,
-        answer: vec![],
-    }
+    Response::NotImplemented(NotImplementedResponse { header, payload })
 }
 
 fn handle_standard_query(
     records: &HashMap<String, AddressConfig>,
     query: DnsStandardQuery,
-) -> ResponseMessage {
+) -> Response {
     let record = records.get(&query.question.name);
 
     let mut header = DnsHeader {
@@ -119,7 +115,7 @@ fn handle_standard_query(
     if let Some(address) = record {
         if let Some(ip) = address.ipv4 {
             header.an_count = 1;
-            return ResponseMessage {
+            return Response::StandardQuery(ResponseMessage {
                 header,
                 question: query.question,
                 answer: vec![DnsResourceRecord {
@@ -130,14 +126,14 @@ fn handle_standard_query(
                     resource_data_length: 4,
                     resource_data: ip,
                 }],
-            };
+            });
         }
     }
 
     header.response_code = DnsResponseCode::NameError;
-    ResponseMessage {
+    Response::StandardQuery(ResponseMessage {
         header,
         question: query.question,
         answer: vec![],
-    }
+    })
 }

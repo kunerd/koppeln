@@ -5,13 +5,15 @@ pub mod web;
 use bytes::Buf;
 use bytes::{BufMut, BytesMut};
 use std::collections::HashMap;
-use std::io;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
+use std::{io, mem};
 
 use tokio::sync::Mutex;
 use tokio_util::codec::Decoder;
 use tokio_util::codec::Encoder;
+
+const DNS_HEADER_LEN: usize = 12;
 
 pub type AddressStorage = Arc<Mutex<HashMap<String, settings::AddressConfig>>>;
 
@@ -328,6 +330,12 @@ impl From<&DnsStandardQuery> for Vec<u8> {
 }
 
 #[derive(Debug)]
+pub enum Response {
+    StandardQuery(ResponseMessage),
+    NotImplemented(NotImplementedResponse),
+}
+
+#[derive(Debug)]
 pub struct ResponseMessage {
     pub header: DnsHeader,
     pub question: DnsQuestion,
@@ -353,10 +361,27 @@ impl ResponseMessage {
     }
 }
 
+#[derive(Debug)]
+pub struct NotImplementedResponse {
+    pub header: DnsHeader,
+    pub payload: Vec<u8>,
+}
+
+impl NotImplementedResponse {
+    pub fn as_u8(mut self) -> Vec<u8> {
+        let mut raw_message: Vec<u8> = (&self.header).into();
+
+        let mut payload = mem::take(&mut self.payload);
+        raw_message.append(&mut payload);
+
+        raw_message
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Query(DnsStandardQuery),
-    Unsupported(DnsHeader, DnsQuestion),
+    Unsupported(DnsHeader, Vec<u8>),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -380,8 +405,7 @@ impl Decoder for DnsMessageCodec {
             return Ok(None);
         }
 
-        let len = buf.len();
-        if len < 12 {
+        if buf.len() < DNS_HEADER_LEN {
             // not a enough data for a valid header
             return Ok(None);
         }
@@ -393,11 +417,15 @@ impl Decoder for DnsMessageCodec {
                 Message::Query(query)
             }
             Err(err) => match err {
-                parser::Error::NoStdQuery(header, question) => {
-                    Message::Unsupported(header, question)
+                parser::Error::NoStdQuery(header, rem) => {
+                    buf.advance(DNS_HEADER_LEN + rem.len());
+                    Message::Unsupported(header, rem)
                 }
                 parser::Error::Incomplete => return Ok(None),
-                parser::Error::Parser => return Err(Error::Decoding),
+                parser::Error::Parser => {
+                    buf.clear();
+                    return Err(Error::Decoding);
+                }
             },
         };
 
@@ -405,13 +433,16 @@ impl Decoder for DnsMessageCodec {
     }
 }
 
-impl Encoder<ResponseMessage> for DnsMessageCodec {
+impl Encoder<Response> for DnsMessageCodec {
     type Error = io::Error;
 
-    fn encode(&mut self, data: ResponseMessage, buf: &mut BytesMut) -> Result<(), io::Error> {
-        let raw_data = data.as_u8();
-        buf.reserve(raw_data.len());
-        buf.put(raw_data.as_ref());
+    fn encode(&mut self, response: Response, buf: &mut BytesMut) -> Result<(), io::Error> {
+        let data = match response {
+            Response::StandardQuery(message) => message.as_u8(),
+            Response::NotImplemented(message) => message.as_u8(),
+        };
+        buf.reserve(data.len());
+        buf.put(data.as_ref());
         Ok(())
     }
 }

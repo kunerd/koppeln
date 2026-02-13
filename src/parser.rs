@@ -19,7 +19,7 @@ use super::{DnsHeader, DnsQuestion};
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("not a standard query")]
-    NoStdQuery(DnsHeader, DnsQuestion),
+    NoStdQuery(DnsHeader, Vec<u8>),
     #[error("not enough data")]
     Incomplete,
     #[error("failed to parse payload")]
@@ -36,23 +36,24 @@ impl<F> From<nom::Err<F>> for Error {
 }
 
 pub fn dns_query(input: &[u8]) -> Result<(usize, DnsStandardQuery), Error> {
-    let start_len = input.len();
+    let len = input.len();
 
     let (rem, header) = dns_header(input)?;
-    let (rem, question) = dns_question(rem)?;
 
     if header.opcode != DnsOpCode::StandardQuery {
-        return Err(Error::NoStdQuery(header, question));
+        return Err(Error::NoStdQuery(header, rem.to_vec()));
     };
 
-    // TODO: treat question with qdcount > 1 as format error (code 1) according to:
+    // TODO: treat query with qdcount > 1 as format error (code 1) according to:
     // https://www.rfc-editor.org/rfc/rfc9619#name-updates-to-rfc-1035
+
+    let (rem, question) = dns_question(rem)?;
 
     // TODO DNS messages are restricted to 512 bytes, it this limit is
     // exceeded the messages should be truncated and the TC bit must be
     // set in the header
 
-    let consumed = start_len - rem.len();
+    let consumed = len - rem.len();
     Ok((consumed, DnsStandardQuery { header, question }))
 }
 
