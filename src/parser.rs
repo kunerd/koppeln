@@ -47,10 +47,6 @@ pub fn dns_query(input: &[u8]) -> Result<(usize, dns::StandardQuery), Error> {
 
     let (rem, question) = dns_question(rem)?;
 
-    // TODO DNS messages are restricted to 512 bytes, it this limit is
-    // exceeded the messages should be truncated and the TC bit must be
-    // set in the header
-
     let consumed = len - rem.len();
     Ok((consumed, dns::StandardQuery { header, question }))
 }

@@ -81,8 +81,8 @@ impl Encoder<Response> for Codec {
 
     fn encode(&mut self, response: Response, buf: &mut BytesMut) -> Result<(), io::Error> {
         let data = match response {
-            Response::StandardQuery(message) => message.as_u8(),
-            Response::NotImplemented(message) => message.as_u8(),
+            Response::StandardQuery(response) => response.as_u8(),
+            Response::NotImplemented(response) => response.as_u8(),
         };
         buf.reserve(data.len());
         buf.put(data.as_ref());

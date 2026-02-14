@@ -4,7 +4,10 @@ pub use codec::Codec;
 
 use bytes::BufMut;
 
-use std::{mem, net::Ipv4Addr};
+use std::{
+    mem,
+    net::{Ipv4Addr, Ipv6Addr},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StandardQuery {
@@ -118,34 +121,32 @@ pub enum OpCode {
 }
 
 #[derive(Debug)]
-pub struct ResourceRecord {
-    pub name: Name,
-    pub data_type: QueryType,
-    pub data_class: QueryClass,
-    pub ttl: u32,
-    pub resource_data_length: u16,
-    // TODO: this depends on type and class, maybe it can be implemented as an enum
-    pub resource_data: Ipv4Addr,
+pub enum ResourceRecord {
+    A {
+        name: Name,
+        ttl: u32,
+        addr: Ipv4Addr,
+    },
+    AAAA {
+        name: Name,
+        ttl: u32,
+        addr: Ipv6Addr,
+    },
 }
 
 #[derive(Debug)]
-pub struct Name {
-    labels: Option<Vec<String>>,
-    pointer: Option<LabelPointer>,
+pub enum Name {
+    Labels(Vec<String>),
+    Pointer(LabelPointer),
 }
 
-impl Name {
-    pub fn with_pointer(offset: u16) -> Self {
-        Name {
-            labels: None,
-            pointer: Some(LabelPointer { offset }),
-        }
+#[derive(Debug)]
+pub struct LabelPointer(u16);
+
+impl LabelPointer {
+    pub fn new(offset: u16) -> Self {
+        Self(offset)
     }
-}
-
-#[derive(Debug)]
-struct LabelPointer {
-    offset: u16,
 }
 
 #[derive(Debug)]
@@ -157,13 +158,30 @@ pub enum Qr {
 impl From<ResourceRecord> for Vec<u8> {
     fn from(rr: ResourceRecord) -> Self {
         let mut raw_rr = Vec::new();
-        raw_rr.append(&mut rr.name.into());
-        raw_rr.put_u16(rr.data_type.into());
-        raw_rr.put_u16(rr.data_class.into());
-        raw_rr.put_u32(rr.ttl);
-        raw_rr.put_u16(rr.resource_data_length);
-        raw_rr.put_u32(rr.resource_data.into());
+        match rr {
+            ResourceRecord::A { name, ttl, addr } => {
+                raw_rr.append(&mut name.into());
+                raw_rr.put_u16(QueryType::A.into());
+                raw_rr.put_u16(QueryClass::IN.into());
+                raw_rr.put_u32(ttl);
 
+                // IPv4 addr consists of 4 byte octets
+                raw_rr.put_u16(4);
+                raw_rr.put_u32(addr.into());
+            }
+            ResourceRecord::AAAA { name, ttl, addr } => {
+                raw_rr.append(&mut name.into());
+                raw_rr.put_u16(QueryType::AAAA.into());
+                raw_rr.put_u16(QueryClass::IN.into());
+                raw_rr.put_u32(ttl);
+
+                // IPv6 addr consists of 16 byte octets
+                raw_rr.put_u16(16);
+                for s in addr.segments() {
+                    raw_rr.put_u16(s);
+                }
+            }
+        }
         raw_rr
     }
 }
@@ -330,21 +348,18 @@ impl From<Name> for Vec<u8> {
     fn from(name: Name) -> Self {
         let mut raw_name: Vec<u8> = Vec::new();
 
-        // FIXME get rid of case where both, labels and pointer, are None
-        if let Some(labels) = name.labels {
-            let mut raw_labels: Vec<u8> = labels
-                .iter()
-                .flat_map(|x| {
-                    let mut r = vec![x.len() as u8];
-                    r.put(x.as_bytes());
-                    r
-                })
-                .collect();
-            raw_name.append(&mut raw_labels);
-        }
-
-        if let Some(pointer) = name.pointer {
-            raw_name.put_u16(0b1100000000000000 | pointer.offset);
+        match name {
+            Name::Labels(labels) => {
+                labels.iter().for_each(|l| {
+                    raw_name.put_u8(l.len() as u8);
+                    raw_name.put(l.as_bytes());
+                });
+                // null termination
+                raw_name.put_u8(0);
+            }
+            Name::Pointer(pointer) => {
+                raw_name.put_u16(0b1100000000000000 | pointer.0);
+            }
         }
 
         raw_name

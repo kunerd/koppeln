@@ -5,7 +5,7 @@ use std::sync::Arc;
 use env_logger::Env;
 use futures::stream::StreamExt;
 use futures::SinkExt;
-use koppeln::dns::{codec, NotImplementedResponse, ResponseMessage};
+use koppeln::dns::{codec, NotImplementedResponse, ResourceRecord, ResponseMessage};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
@@ -91,10 +91,7 @@ fn handle_standard_query(
     records: &HashMap<String, AddressConfig>,
     query: dns::StandardQuery,
 ) -> codec::Response {
-    let record = records.get(&query.question.name);
-
     let mut header = dns::Header {
-        //qr: DnsQr::Respons,
         authoritative_anser: true,
         truncated: false,
         recursion_available: false,
@@ -103,7 +100,10 @@ fn handle_standard_query(
         ..query.header
     };
 
-    if query.question.query_type != dns::QueryType::A {
+    if !matches!(
+        query.question.query_type,
+        dns::QueryType::A | dns::QueryType::AAAA
+    ) {
         return codec::Response::StandardQuery(ResponseMessage {
             header,
             question: query.question,
@@ -111,28 +111,38 @@ fn handle_standard_query(
         });
     }
 
-    if let Some(address) = record {
-        if let Some(ip) = address.ipv4 {
-            header.an_count = 1;
-            return codec::Response::StandardQuery(ResponseMessage {
-                header,
-                question: query.question,
-                answer: vec![dns::ResourceRecord {
-                    name: dns::Name::with_pointer(11),
-                    data_type: dns::QueryType::A,
-                    data_class: dns::QueryClass::IN,
+    let answer = records.get(&query.question.name).and_then(|record| {
+        match query.question.query_type {
+            dns::QueryType::A => record.ipv4.map(|ip| {
+                vec![ResourceRecord::A {
+                    // TODO: use compression, e.g. `Name::Pointer`
+                    name: dns::Name::Labels(query.question.labels.clone()),
                     ttl: 15,
-                    resource_data_length: 4,
-                    resource_data: ip,
-                }],
-            });
+                    addr: ip,
+                }]
+            }),
+            dns::QueryType::AAAA => record.ipv6.map(|ip| {
+                vec![ResourceRecord::AAAA {
+                    // TODO: use compression, e.g. `Name::Pointer`
+                    name: dns::Name::Labels(query.question.labels.clone()),
+                    ttl: 15,
+                    addr: ip,
+                }]
+            }),
+            _ => None,
         }
+    });
+
+    if answer.is_none() {
+        header.response_code = dns::ResponseCode::NameError;
     }
 
-    header.response_code = dns::ResponseCode::NameError;
-    codec::Response::StandardQuery(ResponseMessage {
+    let answer = answer.unwrap_or_default();
+
+    header.an_count = answer.len() as u16;
+    return codec::Response::StandardQuery(ResponseMessage {
         header,
         question: query.question,
-        answer: vec![],
-    })
+        answer,
+    });
 }
