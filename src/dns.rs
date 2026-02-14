@@ -1,6 +1,10 @@
-use std::{mem, net::Ipv4Addr};
+pub mod codec;
+
+pub use codec::Codec;
 
 use bytes::BufMut;
+
+use std::{mem, net::Ipv4Addr};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StandardQuery {

@@ -1,9 +1,3 @@
-#[macro_use]
-extern crate log;
-extern crate koppeln;
-extern crate tokio;
-extern crate tokio_util;
-
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -11,20 +5,20 @@ use std::sync::Arc;
 use env_logger::Env;
 use futures::stream::StreamExt;
 use futures::SinkExt;
-use koppeln::dns::{NotImplementedResponse, ResponseMessage};
+use koppeln::dns::{codec, NotImplementedResponse, ResponseMessage};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
 
 use koppeln::settings::{AddressConfig, Settings};
-use koppeln::{dns, web, DnsMessageCodec, Response};
+use koppeln::{dns, web};
 
 #[tokio::main]
 async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let settings = Settings::load().expect("Could not load settings.");
-    debug!("Settings:\n{:?}", settings);
+    log::debug!("Settings:\n{:?}", settings);
 
     let storage = Arc::new(Mutex::new(settings.addresses));
 
@@ -33,7 +27,7 @@ async fn main() {
         web_server_address,
         storage.clone(),
     ));
-    info!(
+    log::info!(
         "HTTP server now listening on: {ip}:{port}",
         ip = settings.web_address,
         port = settings.web_port
@@ -41,16 +35,16 @@ async fn main() {
 
     let addr = SocketAddr::from((settings.dns_address, settings.dns_port));
     let udp_socket = UdpSocket::bind(&addr).await.unwrap();
-    let mut dns_stream = UdpFramed::new(udp_socket, DnsMessageCodec::default());
+    let mut dns_stream = UdpFramed::new(udp_socket, dns::Codec::default());
 
-    info!(
+    log::info!(
         "DNS server now listening on: {ip}:{port}",
         ip = settings.dns_address,
         port = settings.dns_port
     );
 
     let udp_server = tokio::spawn(async move {
-        debug!("Waiting for DNS queries...");
+        log::debug!("Waiting for DNS queries...");
         while let Some(res) = dns_stream.next().await {
             let (query, addr) = match res {
                 Ok((query, addr)) => (query, addr),
@@ -59,19 +53,19 @@ async fn main() {
                     continue;
                 }
             };
-            debug!("DNS message received: {:?}", query);
+            log::debug!("DNS message received: {:?}", query);
 
             let response = match query {
-                koppeln::Message::Query(query) => {
+                codec::Message::Query(query) => {
                     let records = storage.lock().await;
                     handle_standard_query(&records, query)
                 }
-                koppeln::Message::Unsupported(header, payload) => {
+                codec::Message::Unsupported(header, payload) => {
                     heandle_unsupported(header, payload)
                 }
             };
 
-            debug!("DNS response: {:?}", response);
+            log::debug!("DNS response: {:?}", response);
             dns_stream.send((response, addr)).await.unwrap();
         }
     });
@@ -81,7 +75,7 @@ async fn main() {
         .unwrap();
 }
 
-fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> Response {
+fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> codec::Response {
     let header = dns::Header {
         authoritative_anser: true,
         truncated: false,
@@ -90,13 +84,13 @@ fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> Response {
         response_code: dns::ResponseCode::NotImplemented,
         ..header
     };
-    Response::NotImplemented(NotImplementedResponse { header, payload })
+    codec::Response::NotImplemented(NotImplementedResponse { header, payload })
 }
 
 fn handle_standard_query(
     records: &HashMap<String, AddressConfig>,
     query: dns::StandardQuery,
-) -> Response {
+) -> codec::Response {
     let record = records.get(&query.question.name);
 
     let mut header = dns::Header {
@@ -112,7 +106,7 @@ fn handle_standard_query(
     if let Some(address) = record {
         if let Some(ip) = address.ipv4 {
             header.an_count = 1;
-            return Response::StandardQuery(ResponseMessage {
+            return codec::Response::StandardQuery(ResponseMessage {
                 header,
                 question: query.question,
                 answer: vec![dns::ResourceRecord {
@@ -128,7 +122,7 @@ fn handle_standard_query(
     }
 
     header.response_code = dns::ResponseCode::NameError;
-    Response::StandardQuery(ResponseMessage {
+    codec::Response::StandardQuery(ResponseMessage {
         header,
         question: query.question,
         answer: vec![],
