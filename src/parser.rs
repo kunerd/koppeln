@@ -1,6 +1,4 @@
-use crate::DnsOpCode;
-use crate::DnsStandardQuery;
-use std::str;
+use crate::dns;
 
 use nom::Parser;
 use nom::{
@@ -14,12 +12,12 @@ use nom::{
     IResult,
 };
 
-use super::{DnsHeader, DnsQuestion};
+use std::str;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("not a standard query")]
-    NoStdQuery(DnsHeader, Vec<u8>),
+    NoStdQuery(dns::Header, Vec<u8>),
     #[error("not enough data")]
     Incomplete,
     #[error("failed to parse payload")]
@@ -35,12 +33,12 @@ impl<F> From<nom::Err<F>> for Error {
     }
 }
 
-pub fn dns_query(input: &[u8]) -> Result<(usize, DnsStandardQuery), Error> {
+pub fn dns_query(input: &[u8]) -> Result<(usize, dns::StandardQuery), Error> {
     let len = input.len();
 
     let (rem, header) = dns_header(input)?;
 
-    if header.opcode != DnsOpCode::StandardQuery {
+    if header.opcode != dns::OpCode::StandardQuery {
         return Err(Error::NoStdQuery(header, rem.to_vec()));
     };
 
@@ -54,10 +52,10 @@ pub fn dns_query(input: &[u8]) -> Result<(usize, DnsStandardQuery), Error> {
     // set in the header
 
     let consumed = len - rem.len();
-    Ok((consumed, DnsStandardQuery { header, question }))
+    Ok((consumed, dns::StandardQuery { header, question }))
 }
 
-pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
+pub fn dns_header(input: &[u8]) -> IResult<&[u8], dns::Header> {
     let mut parser = (
         be_u16,
         bits((
@@ -81,7 +79,7 @@ pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
 
     Ok((
         input,
-        DnsHeader {
+        dns::Header {
             id,
             opcode: opcode.into(),
             authoritative_anser: false,
@@ -96,7 +94,7 @@ pub fn dns_header(input: &[u8]) -> IResult<&[u8], DnsHeader> {
         },
     ))
 }
-pub fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
+pub fn dns_question(input: &[u8]) -> IResult<&[u8], dns::Question> {
     let mut parser = (dns_labels, be_u16, be_u16);
 
     let (rem, (labels, qtype, qclass)) = parser.parse(input)?;
@@ -104,7 +102,7 @@ pub fn dns_question(input: &[u8]) -> IResult<&[u8], DnsQuestion> {
 
     Ok((
         rem,
-        DnsQuestion {
+        dns::Question {
             labels,
             name,
             query_type: qtype.into(),
@@ -164,7 +162,6 @@ fn take_four_bits((input, offset): (&[u8], usize)) -> IResult<(&[u8], usize), u8
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DnsClass, DnsOpCode, DnsResponseCode, DnsType};
 
     #[test]
     fn test_parse_id() {
@@ -179,19 +176,19 @@ mod tests {
     fn test_parse_opcode() {
         let raw_header = b"\x66\xf3\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00";
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.opcode, DnsOpCode::StandardQuery);
+        assert_eq!(header.opcode, dns::OpCode::StandardQuery);
 
         let raw_header = b"\x66\xf3\x0a\x00\x00\x01\x00\x00\x00\x00\x00\x00";
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.opcode, DnsOpCode::InversQuery);
+        assert_eq!(header.opcode, dns::OpCode::InversQuery);
 
         let raw_header = b"\x66\xf3\x10\x00\x00\x01\x00\x00\x00\x00\x00\x00";
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.opcode, DnsOpCode::ServerStatusRequest);
+        assert_eq!(header.opcode, dns::OpCode::ServerStatusRequest);
 
         let raw_header = b"\x66\xf3\x28\x00\x00\x01\x00\x00\x00\x00\x00\x00";
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.opcode, DnsOpCode::Reserved(5));
+        assert_eq!(header.opcode, dns::OpCode::Reserved(5));
     }
 
     #[test]
@@ -223,7 +220,7 @@ mod tests {
         let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.response_code, DnsResponseCode::NoError);
+        assert_eq!(header.response_code, dns::ResponseCode::NoError);
     }
 
     #[test]
@@ -295,8 +292,8 @@ mod tests {
 
         let (_, question) = dns_question(raw_question).unwrap();
         assert_eq!(question.labels[0], String::from("test"));
-        assert_eq!(question.query_type, DnsType::A);
-        assert_eq!(question.query_class, DnsClass::IN);
+        assert_eq!(question.query_type, dns::QueryType::A);
+        assert_eq!(question.query_class, dns::QueryClass::IN);
     }
 
     #[test]
