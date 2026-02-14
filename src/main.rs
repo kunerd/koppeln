@@ -103,6 +103,14 @@ fn handle_standard_query(
         ..query.header
     };
 
+    if query.question.query_type != dns::QueryType::A {
+        return codec::Response::StandardQuery(ResponseMessage {
+            header,
+            question: query.question,
+            answer: vec![],
+        });
+    }
+
     if let Some(address) = record {
         if let Some(ip) = address.ipv4 {
             header.an_count = 1;

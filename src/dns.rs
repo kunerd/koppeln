@@ -86,6 +86,9 @@ pub enum QueryType {
     MX,
     SOA,
     AAAA,
+    CNAME,
+    NotImplmented(u16),
+    ALL,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -271,12 +274,14 @@ impl From<u16> for QueryType {
         match value {
             1 => QueryType::A,
             2 => QueryType::NS,
-            3 => QueryType::MX,
-            4 => QueryType::MX,
+            //NOTE: 3 and 4 Obsolete
+            5 => QueryType::CNAME,
             6 => QueryType::SOA,
+            // NOTE: [7, 8, 9, 10] experiemental
             15 => QueryType::MX,
             28 => QueryType::AAAA,
-            _ => panic!("This should not occur :("),
+            255 => QueryType::ALL,
+            t => QueryType::NotImplmented(t),
         }
     }
 }
@@ -286,9 +291,14 @@ impl From<QueryType> for u16 {
         match value {
             QueryType::A => 1,
             QueryType::NS => 2,
+            //NOTE: 3 and 4 Obsolete
+            QueryType::CNAME => 5,
             QueryType::SOA => 6,
+            // NOTE: [7, 8, 9, 10] experiemental
             QueryType::MX => 15,
             QueryType::AAAA => 28,
+            QueryType::ALL => 255,
+            QueryType::NotImplmented(t) => t,
         }
     }
 }

@@ -1,4 +1,7 @@
-use crate::{dns, parser};
+use crate::{
+    dns::{self},
+    parser,
+};
 
 use bytes::{Buf, BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
@@ -36,6 +39,7 @@ impl Decoder for Codec {
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         log::debug!("Unpacking DNS query.");
+
         if buf.is_empty() {
             return Ok(None);
         }
@@ -44,8 +48,12 @@ impl Decoder for Codec {
             // not a enough data for a valid header
             return Ok(None);
         }
+        // TODO DNS messages are restricted to 512 bytes, if this limit is
+        // exceeded the messages should be truncated and the TC bit must be
+        // set in the header
 
         let msg = match parser::dns_query(buf) {
+            // let msg = match StandardQuery::parse(buf) {
             Ok((consumed, query)) => {
                 buf.advance(consumed);
 
