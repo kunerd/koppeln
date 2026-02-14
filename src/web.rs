@@ -3,8 +3,8 @@ use std::net::{IpAddr, SocketAddr};
 
 use serde::Deserialize;
 use warp;
-use warp::http::StatusCode;
 use warp::Filter;
+use warp::http::StatusCode;
 
 use super::AddressStorage;
 
@@ -64,7 +64,9 @@ pub async fn update_address_handler(
     storage: AddressStorage,
 ) -> Result<impl warp::Reply, Infallible> {
     let mut addresses = storage.lock().await;
-    let addr = addresses.get_mut(&update_info.hostname).unwrap();
+    let Some(addr) = addresses.get_mut(&update_info.hostname) else {
+        return Ok(StatusCode::UNPROCESSABLE_ENTITY);
+    };
 
     if token != addr.token {
         return Ok(StatusCode::FORBIDDEN);

@@ -3,9 +3,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use env_logger::Env;
-use futures::stream::StreamExt;
 use futures::SinkExt;
-use koppeln::dns::{codec, NotImplementedResponse, ResourceRecord, ResponseMessage};
+use futures::stream::StreamExt;
+use koppeln::dns::{NotImplementedResponse, ResourceRecord, ResponseMessage, codec};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
@@ -77,7 +77,7 @@ async fn main() {
 
 fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> codec::Response {
     let header = dns::Header {
-        authoritative_anser: true,
+        authoritative_answer: true,
         truncated: false,
         recursion_available: false,
         an_count: 0,
@@ -92,7 +92,7 @@ fn handle_standard_query(
     query: dns::StandardQuery,
 ) -> codec::Response {
     let mut header = dns::Header {
-        authoritative_anser: true,
+        authoritative_answer: true,
         truncated: false,
         recursion_available: false,
         an_count: 0,

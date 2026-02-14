@@ -64,7 +64,7 @@ pub struct Header {
     // qr: DnsQr,
     pub opcode: OpCode,
     pub truncated: bool,
-    pub authoritative_anser: bool,
+    pub authoritative_answer: bool,
     pub recursion_desired: bool,
     pub recursion_available: bool,
     pub response_code: ResponseCode,
@@ -204,7 +204,7 @@ impl From<&Header> for Vec<u8> {
         let mut flags: u16 = 0;
         flags |= (u16::from(Qr::Response) << 15) & 0b1000000000000000;
         flags |= (u16::from(u8::from(header.opcode)) << 11) & 0b0111100000000000;
-        flags |= ((header.authoritative_anser as u16) << 10) & 0b0000010000000000;
+        flags |= ((header.authoritative_answer as u16) << 10) & 0b0000010000000000;
         flags |= ((header.truncated as u16) << 9) & 0b0000001000000000;
         flags |= ((header.recursion_desired as u16) << 8) & 0b0000000100000000;
         flags |= ((header.recursion_available as u16) << 7) & 0b0000000010000000;
@@ -368,11 +368,7 @@ impl From<Name> for Vec<u8> {
 
 impl From<u16> for Qr {
     fn from(value: u16) -> Self {
-        if value == 1 {
-            Qr::Response
-        } else {
-            Qr::Query
-        }
+        if value == 1 { Qr::Response } else { Qr::Query }
     }
 }
 

@@ -53,7 +53,6 @@ impl Decoder for Codec {
         // set in the header
 
         let msg = match parser::dns_query(buf) {
-            // let msg = match StandardQuery::parse(buf) {
             Ok((consumed, query)) => {
                 buf.advance(consumed);
 
@@ -103,7 +102,7 @@ mod tests {
             id: 1234,
             opcode: dns::OpCode::StandardQuery,
             truncated: false,
-            authoritative_anser: false,
+            authoritative_answer: false,
             recursion_desired: false,
             recursion_available: false,
             response_code: dns::ResponseCode::NoError,
@@ -129,7 +128,7 @@ mod tests {
             id: 1234,
             opcode: dns::OpCode::StandardQuery,
             truncated: false,
-            authoritative_anser: false,
+            authoritative_answer: false,
             recursion_desired: false,
             recursion_available: false,
             response_code: dns::ResponseCode::NoError,
@@ -171,7 +170,7 @@ mod tests {
             id: 1234,
             opcode: dns::OpCode::StandardQuery,
             truncated: false,
-            authoritative_anser: false,
+            authoritative_answer: false,
             recursion_desired: false,
             recursion_available: false,
             response_code: dns::ResponseCode::NoError,

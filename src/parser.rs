@@ -2,14 +2,14 @@ use crate::dns;
 
 use nom::Parser;
 use nom::{
+    IResult,
     bits::{bits, complete::take},
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric1, char},
     combinator::{all_consuming, map, map_res, peek, recognize},
     multi::{length_value, many_till, separated_list0},
-    number::complete::{be_u16, be_u8},
+    number::complete::{be_u8, be_u16},
     sequence::pair,
-    IResult,
 };
 
 use std::str;
@@ -78,7 +78,7 @@ pub fn dns_header(input: &[u8]) -> IResult<&[u8], dns::Header> {
         dns::Header {
             id,
             opcode: opcode.into(),
-            authoritative_anser: false,
+            authoritative_answer: false,
             truncated: tc != 0,
             recursion_desired: rd != 0,
             recursion_available: ra != 0,
