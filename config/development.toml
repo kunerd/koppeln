@@ -1,7 +1,16 @@
-#dns_address = "127.0.0.1"
+dns_address = "127.0.0.1"
 dns_port = 5354
-#web_address = "0.0.0.0"
+web_address = "0.0.0.0"
 web_port = 8088
 
+[soa]
+mname = "dyn.example.com"
+rname = "postmaster.example.com"
+serial = 1
+refresh = 300
+retry = 900
+expire = 900
+minimum = 300
+
 [addresses]
-"test.dyn.example.com" = { token = "super_secure" }
+"test" = { token = "super_secure" }

@@ -6,7 +6,9 @@ use warp;
 use warp::Filter;
 use warp::http::StatusCode;
 
-use super::AddressStorage;
+use crate::dns::DomainName;
+
+use super::SharedStorage;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct UpdateInfo {
@@ -14,7 +16,7 @@ pub struct UpdateInfo {
     pub ip: IpAddr,
 }
 
-pub async fn create_update_server(address: SocketAddr, storage: AddressStorage) {
+pub async fn create_update_server(address: SocketAddr, storage: SharedStorage) {
     warp::serve(update_address(storage))
         .bind(address)
         .await
@@ -23,7 +25,7 @@ pub async fn create_update_server(address: SocketAddr, storage: AddressStorage) 
 }
 
 pub fn update_address(
-    storage: AddressStorage,
+    storage: SharedStorage,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("hostname")
         .and(warp::put())
@@ -49,8 +51,8 @@ fn with_token() -> impl Filter<Extract = (String,), Error = warp::Rejection> + C
 }
 
 fn with_storage(
-    storage: AddressStorage,
-) -> impl Filter<Extract = (AddressStorage,), Error = std::convert::Infallible> + Clone {
+    storage: SharedStorage,
+) -> impl Filter<Extract = (SharedStorage,), Error = std::convert::Infallible> + Clone {
     warp::any().map(move || storage.clone())
 }
 
@@ -61,10 +63,18 @@ fn json_body() -> impl Filter<Extract = (UpdateInfo,), Error = warp::Rejection> 
 pub async fn update_address_handler(
     token: String,
     update_info: UpdateInfo,
-    storage: AddressStorage,
+    storage: SharedStorage,
 ) -> Result<impl warp::Reply, Infallible> {
-    let mut addresses = storage.lock().await;
-    let Some(addr) = addresses.get_mut(&update_info.hostname) else {
+    let mut storage = match storage.lock() {
+        Ok(storage) => storage,
+        Err(err) => {
+            log::error!("failed to lock storage: {err}");
+            return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    let domain_name = DomainName::from(update_info.hostname);
+    let Some(addr) = storage.get_mut(&domain_name) else {
         return Ok(StatusCode::UNPROCESSABLE_ENTITY);
     };
 

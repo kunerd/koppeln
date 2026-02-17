@@ -1,26 +1,28 @@
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use koppeln::settings::Settings;
+use koppeln::{Storage, dns, web};
 
+use config::ConfigError;
 use env_logger::Env;
 use futures::SinkExt;
 use futures::stream::StreamExt;
-use koppeln::dns::{NotImplementedResponse, ResourceRecord, ResponseMessage, codec};
+use koppeln::dns::{NotImplementedResponse, codec};
 use tokio::net::UdpSocket;
-use tokio::sync::Mutex;
 use tokio_util::udp::UdpFramed;
 
-use koppeln::settings::{AddressConfig, Settings};
-use koppeln::{dns, web};
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), ConfigError> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let settings = Settings::load().expect("Could not load settings.");
+    let settings = Settings::load()?;
     log::debug!("Settings:\n{:?}", settings);
 
-    let storage = Arc::new(Mutex::new(settings.addresses));
+    let storage = Arc::new(Mutex::new(Storage::new(
+        settings.soa.mname.clone(),
+        settings.addresses,
+    )));
 
     let web_server_address = SocketAddr::from((settings.web_address, settings.web_port));
     let update_server = tokio::spawn(web::create_update_server(
@@ -57,8 +59,15 @@ async fn main() {
 
             let response = match query {
                 codec::Message::Query(query) => {
-                    let records = storage.lock().await;
-                    handle_standard_query(&records, query)
+                    let records = match storage.lock() {
+                        Ok(storage) => storage,
+                        Err(err) => {
+                            log::error!("failed to lock storage: {err}");
+                            continue;
+                        }
+                    };
+                    let msg = dns::server::handle_standard_query(&settings.soa, &records, query);
+                    codec::Response::StandardQuery(msg)
                 }
                 codec::Message::Unsupported(header, payload) => {
                     heandle_unsupported(header, payload)
@@ -73,6 +82,8 @@ async fn main() {
     futures::future::try_join(update_server, udp_server)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> codec::Response {
@@ -85,64 +96,4 @@ fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> codec::Response
         ..header
     };
     codec::Response::NotImplemented(NotImplementedResponse { header, payload })
-}
-
-fn handle_standard_query(
-    records: &HashMap<String, AddressConfig>,
-    query: dns::StandardQuery,
-) -> codec::Response {
-    let mut header = dns::Header {
-        authoritative_answer: true,
-        truncated: false,
-        recursion_available: false,
-        an_count: 0,
-        response_code: dns::ResponseCode::NoError,
-        ..query.header
-    };
-
-    if !matches!(
-        query.question.query_type,
-        dns::QueryType::A | dns::QueryType::AAAA
-    ) {
-        return codec::Response::StandardQuery(ResponseMessage {
-            header,
-            question: query.question,
-            answer: vec![],
-        });
-    }
-
-    let answer = records.get(&query.question.name).and_then(|record| {
-        match query.question.query_type {
-            dns::QueryType::A => record.ipv4.map(|ip| {
-                vec![ResourceRecord::A {
-                    // TODO: use compression, e.g. `Name::Pointer`
-                    name: dns::Name::Labels(query.question.labels.clone()),
-                    ttl: 15,
-                    addr: ip,
-                }]
-            }),
-            dns::QueryType::AAAA => record.ipv6.map(|ip| {
-                vec![ResourceRecord::AAAA {
-                    // TODO: use compression, e.g. `Name::Pointer`
-                    name: dns::Name::Labels(query.question.labels.clone()),
-                    ttl: 15,
-                    addr: ip,
-                }]
-            }),
-            _ => None,
-        }
-    });
-
-    if answer.is_none() {
-        header.response_code = dns::ResponseCode::NameError;
-    }
-
-    let answer = answer.unwrap_or_default();
-
-    header.an_count = answer.len() as u16;
-    return codec::Response::StandardQuery(ResponseMessage {
-        header,
-        question: query.question,
-        answer,
-    });
 }

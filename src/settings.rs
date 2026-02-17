@@ -1,40 +1,25 @@
-use std::collections;
+use std::collections::HashMap;
 use std::env;
 use std::net;
 
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct AddressConfig {
-    #[serde(skip)]
-    pub ipv4: Option<net::Ipv4Addr>,
-    #[serde(skip)]
-    pub ipv6: Option<net::Ipv6Addr>,
-    pub token: String, //pub username: Option<String>,
-                       //pub password: Option<String>
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Settings {
-            dns_address: net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)),
-            dns_port: 53,
-            web_address: net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)),
-            web_port: 80,
-            addresses: collections::HashMap::new(),
-        }
-    }
-}
+use crate::dns;
+use crate::dns::DomainName;
+use crate::storage::SubDomainEntry;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
 pub struct Settings {
     pub dns_address: net::IpAddr,
     pub dns_port: u16,
+
     pub web_address: net::IpAddr,
     pub web_port: u16,
-    pub addresses: collections::HashMap<String, AddressConfig>,
+
+    pub soa: dns::StartOfAuthority,
+
+    pub addresses: HashMap<DomainName, SubDomainEntry>,
 }
 
 impl Settings {

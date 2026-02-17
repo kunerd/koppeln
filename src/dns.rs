@@ -1,8 +1,10 @@
 pub mod codec;
+pub mod server;
 
 pub use codec::Codec;
 
 use bytes::BufMut;
+use serde::{Deserialize, Serialize};
 
 use std::{
     mem,
@@ -82,6 +84,43 @@ pub struct Question {
     pub query_class: QueryClass,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartOfAuthority {
+    pub mname: DomainName,
+    pub rname: DomainName,
+    // TODO: newtypes
+    pub serial: u32,
+    pub refresh: u32,
+    pub retry: u32,
+    pub expire: u32,
+    pub minimum: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct DomainName(String);
+
+impl DomainName {
+    pub fn strip_suffix(&self, suffix: &DomainName) -> Option<DomainName> {
+        self.0
+            .strip_suffix(&suffix.0)?
+            .strip_suffix(".")
+            .map(String::from)
+            .map(DomainName)
+    }
+}
+
+impl From<&str> for DomainName {
+    fn from(name: &str) -> Self {
+        Self(name.to_string())
+    }
+}
+
+impl From<String> for DomainName {
+    fn from(name: String) -> Self {
+        Self(name)
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum QueryType {
     A,
@@ -132,6 +171,7 @@ pub enum ResourceRecord {
         ttl: u32,
         addr: Ipv6Addr,
     },
+    SOA(StartOfAuthority),
 }
 
 #[derive(Debug)]
@@ -180,6 +220,16 @@ impl From<ResourceRecord> for Vec<u8> {
                 for s in addr.segments() {
                     raw_rr.put_u16(s);
                 }
+            }
+            ResourceRecord::SOA(soa) => {
+                raw_rr.append(&mut soa.mname.clone().into());
+                raw_rr.put_u16(QueryType::SOA.into());
+                raw_rr.put_u16(QueryClass::IN.into());
+                raw_rr.put_u32(soa.minimum);
+
+                let rdata = Vec::<u8>::from(soa);
+                raw_rr.put_u16(rdata.len() as u16);
+                raw_rr.extend(rdata)
             }
         }
         raw_rr
@@ -237,6 +287,41 @@ impl From<&Question> for Vec<u8> {
         raw.put_u16(question.query_class.into());
 
         raw
+    }
+}
+
+impl From<StartOfAuthority> for Vec<u8> {
+    fn from(soa: StartOfAuthority) -> Self {
+        let mut raw = vec![];
+
+        raw.extend(Vec::<u8>::from(soa.mname));
+        raw.extend(Vec::<u8>::from(soa.rname));
+        raw.put_u32(soa.serial);
+        raw.put_u32(soa.refresh);
+        raw.put_u32(soa.retry);
+        raw.put_u32(soa.expire);
+        raw.put_u32(soa.minimum);
+
+        raw
+    }
+}
+
+impl From<DomainName> for Vec<u8> {
+    fn from(name: DomainName) -> Self {
+        name.0
+            .split(".")
+            .map(|s| {
+                let mut raw = vec![];
+
+                let bytes = s.as_bytes();
+                raw.put_u8(bytes.len() as u8);
+                raw.extend_from_slice(bytes);
+
+                raw
+            })
+            .flatten()
+            .chain([0u8]) // null terminated string
+            .collect()
     }
 }
 
