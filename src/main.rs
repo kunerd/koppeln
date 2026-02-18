@@ -37,7 +37,7 @@ async fn main() -> Result<(), ConfigError> {
 
     let addr = SocketAddr::from((settings.dns_address, settings.dns_port));
     let udp_socket = UdpSocket::bind(&addr).await.unwrap();
-    let mut dns_stream = UdpFramed::new(udp_socket, dns::Codec::default());
+    let mut dns_stream = UdpFramed::new(udp_socket, dns::Codec);
 
     log::info!(
         "DNS server now listening on: {ip}:{port}",

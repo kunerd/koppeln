@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn slow_sender() {
-        let mut codec = Codec::default();
+        let mut codec = Codec;
         let mut buf = BytesMut::new();
 
         let header = dns::Header {
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn slow_sender_sends_rest_of_data() {
-        let mut codec = Codec::default();
+        let mut codec = Codec;
         let mut buf = BytesMut::new();
 
         let header = dns::Header {
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn slow_sender_sends_rest_of_data_incomlete() {
-        let mut codec = Codec::default();
+        let mut codec = Codec;
         let mut buf = BytesMut::new();
 
         let header = dns::Header {

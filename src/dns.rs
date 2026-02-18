@@ -318,7 +318,7 @@ impl From<DomainName> for Vec<u8> {
     fn from(name: DomainName) -> Self {
         name.0
             .split(".")
-            .map(|s| {
+            .flat_map(|s| {
                 let mut raw = vec![];
 
                 let bytes = s.as_bytes();
@@ -327,7 +327,6 @@ impl From<DomainName> for Vec<u8> {
 
                 raw
             })
-            .flatten()
             .chain([0u8]) // null terminated string
             .collect()
     }

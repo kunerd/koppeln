@@ -64,9 +64,9 @@ pub fn handle_standard_query(
     let answer = answer.unwrap_or_default();
 
     header.an_count = answer.len() as u16;
-    return Response {
+    Response {
         header,
         question: query.question,
         answer,
-    };
+    }
 }
