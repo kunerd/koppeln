@@ -16,8 +16,6 @@ use std::str;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("not a standard query")]
-    NoStdQuery(dns::Header, Vec<u8>),
     #[error("not enough data")]
     Incomplete,
     #[error("failed to parse payload")]
@@ -33,22 +31,27 @@ impl<F> From<nom::Err<F>> for Error {
     }
 }
 
-pub fn dns_query(input: &[u8]) -> Result<(usize, dns::StandardQuery), Error> {
-    let len = input.len();
-
+pub fn dns_query(input: &[u8]) -> Result<dns::Request, Error> {
     let (rem, header) = dns_header(input)?;
 
-    if header.opcode != dns::OpCode::StandardQuery {
-        return Err(Error::NoStdQuery(header, rem.to_vec()));
+    let request = match header.opcode {
+        dns::OpCode::StandardQuery => {
+            // TODO: treat query with qdcount > 1 as format error (code 1) according to:
+            // https://www.rfc-editor.org/rfc/rfc9619#name-updates-to-rfc-1035
+
+            let (_rem, question) = dns_question(rem)?;
+            // TODO: we should check rem for remainding data, which would also
+            // indicate a format error
+
+            let query = dns::StandardQuery { header, question };
+            dns::Request::StandardQuery(query)
+        }
+        dns::OpCode::InversQuery | dns::OpCode::ServerStatusRequest | dns::OpCode::Reserved(_) => {
+            dns::Request::Unsupported(header)
+        }
     };
 
-    // TODO: treat query with qdcount > 1 as format error (code 1) according to:
-    // https://www.rfc-editor.org/rfc/rfc9619#name-updates-to-rfc-1035
-
-    let (rem, question) = dns_question(rem)?;
-
-    let consumed = len - rem.len();
-    Ok((consumed, dns::StandardQuery { header, question }))
+    Ok(request)
 }
 
 pub fn dns_header(input: &[u8]) -> IResult<&[u8], dns::Header> {

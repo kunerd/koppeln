@@ -17,7 +17,7 @@ async fn main() -> Result<(), ConfigError> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let settings = Settings::load()?;
-    log::debug!("Settings:\n{:?}", settings);
+    log::debug!("Settings loaded:\n{:?}", settings);
 
     let storage = Arc::new(Mutex::new(Storage::new(
         settings.soa.mname.clone(),
@@ -58,7 +58,7 @@ async fn main() -> Result<(), ConfigError> {
             log::debug!("DNS message received: {:?}", query);
 
             let response = match query {
-                codec::Message::Query(query) => {
+                dns::Request::StandardQuery(query) => {
                     let records = match storage.lock() {
                         Ok(storage) => storage,
                         Err(err) => {
@@ -69,9 +69,7 @@ async fn main() -> Result<(), ConfigError> {
                     let msg = dns::server::handle_standard_query(&settings.soa, &records, query);
                     codec::Response::StandardQuery(msg)
                 }
-                codec::Message::Unsupported(header, payload) => {
-                    heandle_unsupported(header, payload)
-                }
+                dns::Request::Unsupported(header) => heandle_unsupported(header),
             };
 
             log::debug!("DNS response: {:?}", response);
@@ -86,7 +84,7 @@ async fn main() -> Result<(), ConfigError> {
     Ok(())
 }
 
-fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> codec::Response {
+fn heandle_unsupported(header: dns::Header) -> codec::Response {
     let header = dns::Header {
         authoritative_answer: true,
         truncated: false,
@@ -95,5 +93,5 @@ fn heandle_unsupported(header: dns::Header, payload: Vec<u8>) -> codec::Response
         response_code: dns::ResponseCode::NotImplemented,
         ..header
     };
-    codec::Response::NotImplemented(NotImplementedResponse { header, payload })
+    codec::Response::NotImplemented(NotImplementedResponse { header })
 }

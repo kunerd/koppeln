@@ -3,26 +3,18 @@ use crate::{
     parser,
 };
 
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
 use std::io;
-
-const DNS_HEADER_LEN: usize = 12;
 
 #[derive(Default)]
 pub struct Codec;
 
 #[derive(Debug)]
 pub enum Response {
-    StandardQuery(dns::ResponseMessage),
+    StandardQuery(dns::Response),
     NotImplemented(dns::NotImplementedResponse),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Message {
-    Query(dns::StandardQuery),
-    Unsupported(dns::Header, Vec<u8>),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -34,7 +26,7 @@ pub enum Error {
 }
 
 impl Decoder for Codec {
-    type Item = Message;
+    type Item = dns::Request;
     type Error = Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -44,6 +36,7 @@ impl Decoder for Codec {
             return Ok(None);
         }
 
+        const DNS_HEADER_LEN: usize = 12;
         if buf.len() < DNS_HEADER_LEN {
             // not a enough data for a valid header
             return Ok(None);
@@ -53,16 +46,14 @@ impl Decoder for Codec {
         // set in the header
 
         let msg = match parser::dns_query(buf) {
-            Ok((consumed, query)) => {
-                buf.advance(consumed);
+            Ok(query) => {
+                // there might still be payload data of unknown opcodes left
+                // in the buf, so we have to clear it
+                buf.clear();
 
-                Message::Query(query)
+                query
             }
             Err(err) => match err {
-                parser::Error::NoStdQuery(header, rem) => {
-                    buf.advance(DNS_HEADER_LEN + rem.len());
-                    Message::Unsupported(header, rem)
-                }
                 parser::Error::Incomplete => return Ok(None),
                 parser::Error::Parser => {
                     buf.clear();
@@ -158,7 +149,7 @@ mod tests {
 
         buf.put(&header_raw[11..]);
         let result = codec.decode(&mut buf);
-        assert_eq!(Some(Message::Query(query)), result.unwrap());
+        assert_eq!(Some(dns::Request::StandardQuery(query)), result.unwrap());
     }
 
     #[test]
@@ -205,6 +196,6 @@ mod tests {
 
         buf.put(&header_raw[21..]);
         let result = codec.decode(&mut buf);
-        assert_eq!(Some(Message::Query(query)), result.unwrap());
+        assert_eq!(Some(dns::Request::StandardQuery(query)), result.unwrap());
     }
 }

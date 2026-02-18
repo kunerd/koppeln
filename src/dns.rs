@@ -6,10 +6,24 @@ pub use codec::Codec;
 use bytes::BufMut;
 use serde::{Deserialize, Serialize};
 
-use std::{
-    mem,
-    net::{Ipv4Addr, Ipv6Addr},
-};
+use std::net::{Ipv4Addr, Ipv6Addr};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Request {
+    StandardQuery(StandardQuery),
+    /// 3.1.4.  Unknown DNS Opcodes
+    ///
+    /// The use of previously undefined opcodes is to be expected.  Since the
+    /// DNS was first defined, two new opcodes have been added, UPDATE and
+    /// NOTIFY.
+    ///
+    /// NOTIMP is the expected rcode to an unknown or unimplemented opcode.
+    ///
+    ///    |  NOTE: while new opcodes will most probably use the current
+    ///    |  layout structure for the rest of the message, there is no
+    ///    |  requirement that anything other than the DNS header match.
+    Unsupported(Header),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StandardQuery {
@@ -18,7 +32,7 @@ pub struct StandardQuery {
 }
 
 #[derive(Debug)]
-pub struct ResponseMessage {
+pub struct Response {
     pub header: Header,
     pub question: Question,
     pub answer: Vec<ResourceRecord>,
@@ -26,7 +40,7 @@ pub struct ResponseMessage {
     // additional: Vec<DnsResourceRecord>
 }
 
-impl ResponseMessage {
+impl Response {
     pub fn as_u8(self) -> Vec<u8> {
         let mut raw_message: Vec<u8> = (&self.header).into();
         let mut raw_question: Vec<u8> = (&self.question).into();
@@ -46,17 +60,11 @@ impl ResponseMessage {
 #[derive(Debug)]
 pub struct NotImplementedResponse {
     pub header: Header,
-    pub payload: Vec<u8>,
 }
 
 impl NotImplementedResponse {
-    pub fn as_u8(mut self) -> Vec<u8> {
-        let mut raw_message: Vec<u8> = (&self.header).into();
-
-        let mut payload = mem::take(&mut self.payload);
-        raw_message.append(&mut payload);
-
-        raw_message
+    pub fn as_u8(self) -> Vec<u8> {
+        (&self.header).into()
     }
 }
 

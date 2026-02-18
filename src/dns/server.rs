@@ -1,13 +1,13 @@
 use crate::{
     Storage,
-    dns::{self, DomainName, ResourceRecord, ResponseMessage},
+    dns::{self, DomainName, ResourceRecord, Response},
 };
 
 pub fn handle_standard_query(
     soa: &dns::StartOfAuthority,
     storage: &Storage,
     query: dns::StandardQuery,
-) -> ResponseMessage {
+) -> Response {
     let mut header = dns::Header {
         authoritative_answer: true,
         truncated: false,
@@ -21,7 +21,7 @@ pub fn handle_standard_query(
         query.question.query_type,
         dns::QueryType::A | dns::QueryType::AAAA | dns::QueryType::SOA
     ) {
-        return ResponseMessage {
+        return Response {
             header,
             question: query.question,
             answer: vec![],
@@ -64,7 +64,7 @@ pub fn handle_standard_query(
     let answer = answer.unwrap_or_default();
 
     header.an_count = answer.len() as u16;
-    return ResponseMessage {
+    return Response {
         header,
         question: query.question,
         answer,
