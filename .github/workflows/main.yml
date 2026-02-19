@@ -31,8 +31,8 @@ jobs:
           
       - name: Create and push file into lxc container
         run: |
-          echo "Hello lxc container" > test.txt
-          sudo lxc file push -p text.txt test/tmp/
+          echo "Hello lxc container" > /tmp/test.txt
+          sudo lxc file push -p /tmp/text.txt test/tmp/
 
       - name: Say hello
         run: |
