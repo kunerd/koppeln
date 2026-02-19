@@ -3,27 +3,13 @@ use crate::{
     parser,
 };
 
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
 use std::io;
 
-const DNS_HEADER_LEN: usize = 12;
-
 #[derive(Default)]
 pub struct Codec;
-
-#[derive(Debug)]
-pub enum Response {
-    StandardQuery(dns::ResponseMessage),
-    NotImplemented(dns::NotImplementedResponse),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Message {
-    Query(dns::StandardQuery),
-    Unsupported(dns::Header, Vec<u8>),
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -34,7 +20,7 @@ pub enum Error {
 }
 
 impl Decoder for Codec {
-    type Item = Message;
+    type Item = dns::Request;
     type Error = Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -44,6 +30,7 @@ impl Decoder for Codec {
             return Ok(None);
         }
 
+        const DNS_HEADER_LEN: usize = 12;
         if buf.len() < DNS_HEADER_LEN {
             // not a enough data for a valid header
             return Ok(None);
@@ -53,16 +40,14 @@ impl Decoder for Codec {
         // set in the header
 
         let msg = match parser::dns_query(buf) {
-            Ok((consumed, query)) => {
-                buf.advance(consumed);
+            Ok(query) => {
+                // there might still be payload data of unknown opcodes left
+                // in the buf, so we have to clear it
+                buf.clear();
 
-                Message::Query(query)
+                query
             }
             Err(err) => match err {
-                parser::Error::NoStdQuery(header, rem) => {
-                    buf.advance(DNS_HEADER_LEN + rem.len());
-                    Message::Unsupported(header, rem)
-                }
                 parser::Error::Incomplete => return Ok(None),
                 parser::Error::Parser => {
                     buf.clear();
@@ -75,14 +60,12 @@ impl Decoder for Codec {
     }
 }
 
-impl Encoder<Response> for Codec {
+impl Encoder<dns::Response> for Codec {
     type Error = io::Error;
 
-    fn encode(&mut self, response: Response, buf: &mut BytesMut) -> Result<(), io::Error> {
-        let data = match response {
-            Response::StandardQuery(response) => response.as_u8(),
-            Response::NotImplemented(response) => response.as_u8(),
-        };
+    fn encode(&mut self, response: dns::Response, buf: &mut BytesMut) -> Result<(), io::Error> {
+        // TODO: remove double allocation
+        let data = response.as_u8();
         buf.reserve(data.len());
         buf.put(data.as_ref());
         Ok(())
@@ -95,24 +78,24 @@ mod tests {
 
     #[test]
     fn slow_sender() {
-        let mut codec = Codec::default();
+        let mut codec = Codec;
         let mut buf = BytesMut::new();
 
-        let header = dns::Header {
+        let header = dns::RawHeader {
             id: 1234,
             opcode: dns::OpCode::StandardQuery,
             truncated: false,
             authoritative_answer: false,
             recursion_desired: false,
             recursion_available: false,
-            response_code: dns::ResponseCode::NoError,
+            response_code: dns::response::Rcode::NoError,
             qd_count: 1,
             an_count: 0,
             ns_count: 0,
             ar_count: 0,
         };
 
-        let header_raw: Vec<u8> = (&header).into();
+        let header_raw: Vec<u8> = header.into();
         buf.put(&header_raw[0..11]);
 
         let result = codec.decode(&mut buf);
@@ -121,17 +104,17 @@ mod tests {
 
     #[test]
     fn slow_sender_sends_rest_of_data() {
-        let mut codec = Codec::default();
+        let mut codec = Codec;
         let mut buf = BytesMut::new();
 
-        let header = dns::Header {
+        let header = dns::RawHeader {
             id: 1234,
             opcode: dns::OpCode::StandardQuery,
             truncated: false,
             authoritative_answer: false,
             recursion_desired: false,
             recursion_available: false,
-            response_code: dns::ResponseCode::NoError,
+            response_code: dns::response::Rcode::NoError,
             qd_count: 1,
             an_count: 0,
             ns_count: 0,
@@ -148,32 +131,32 @@ mod tests {
             query_class: dns::QueryClass::IN,
         };
 
-        let query = dns::StandardQuery { header, question };
+        let mut raw_query: Vec<u8> = header.into();
+        let raw_qustion: Vec<u8> = question.into();
+        raw_query.extend(raw_qustion);
 
-        let header_raw: Vec<u8> = (&query).into();
-
-        buf.put(&header_raw[0..11]);
+        buf.put(&raw_query[0..11]);
         let result = codec.decode(&mut buf);
         assert_eq!(None, result.unwrap());
 
-        buf.put(&header_raw[11..]);
-        let result = codec.decode(&mut buf);
-        assert_eq!(Some(Message::Query(query)), result.unwrap());
+        buf.put(&raw_query[11..]);
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(matches!(result, Some(dns::Request::StandardQuery(_))));
     }
 
     #[test]
     fn slow_sender_sends_rest_of_data_incomlete() {
-        let mut codec = Codec::default();
+        let mut codec = Codec;
         let mut buf = BytesMut::new();
 
-        let header = dns::Header {
+        let header = dns::RawHeader {
             id: 1234,
             opcode: dns::OpCode::StandardQuery,
             truncated: false,
             authoritative_answer: false,
             recursion_desired: false,
             recursion_available: false,
-            response_code: dns::ResponseCode::NoError,
+            response_code: dns::response::Rcode::NoError,
             qd_count: 1,
             an_count: 0,
             ns_count: 0,
@@ -190,21 +173,20 @@ mod tests {
             query_class: dns::QueryClass::IN,
         };
 
-        let query = dns::StandardQuery { header, question };
+        let mut raw_query: Vec<u8> = header.into();
+        let raw_qustion: Vec<u8> = question.into();
+        raw_query.extend(raw_qustion);
 
-        let mut header_raw: Vec<u8> = (&query).into();
-        header_raw.append(&mut header_raw[0..11].to_vec());
-
-        buf.put(&header_raw[0..11]);
+        buf.put(&raw_query[0..11]);
         let result = codec.decode(&mut buf);
         assert_eq!(None, result.unwrap());
 
-        buf.put(&header_raw[11..21]);
+        buf.put(&raw_query[11..21]);
         let result = codec.decode(&mut buf);
         assert_eq!(None, result.unwrap());
 
-        buf.put(&header_raw[21..]);
-        let result = codec.decode(&mut buf);
-        assert_eq!(Some(Message::Query(query)), result.unwrap());
+        buf.put(&raw_query[21..]);
+        let result = codec.decode(&mut buf).unwrap();
+        assert!(matches!(result, Some(dns::Request::StandardQuery(_))));
     }
 }

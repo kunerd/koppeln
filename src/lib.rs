@@ -1,11 +1,11 @@
 pub mod dns;
 mod parser;
 pub mod settings;
+mod storage;
 pub mod web;
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use tokio::sync::Mutex;
+pub use storage::Storage;
 
-pub type AddressStorage = Arc<Mutex<HashMap<String, settings::AddressConfig>>>;
+pub type SharedStorage = Arc<Mutex<Storage>>;
