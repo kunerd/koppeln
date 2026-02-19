@@ -62,7 +62,7 @@ dependencies = [
     "cleanup-lxc-server-image"
 ]
 script = [
-    "lxc launch images:debian/11 koppeln-server-base",
+    "lxc launch images:debian/13 koppeln-server-base",
     "sleep 5",
     "lxc exec koppeln-server-base -- systemctl disable systemd-resolved.service",
     "lxc exec koppeln-server-base -- systemctl stop systemd-resolved.service",
@@ -83,7 +83,7 @@ script = [
 [tasks.setup-lxc-client-image]
 dependencies = [ "cleanup-lxc-client-image" ]
 script = [
-    "lxc launch images:debian/11 drill-client-base",
+    "lxc launch images:debian/13 drill-client-base",
     "lxc exec drill-client-base -- apt-get install -y ldnsutils",
     #"lxc snapshot --reuse drill-client-base snapshot",
     "lxc stop drill-client-base",
