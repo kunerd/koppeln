@@ -1,8 +1,10 @@
 [Unit]
-Description=A minimalistic dynamic DNS server.
+Description=Koppeln - A minimalistic dynamic DNS server.
 
 [Service]
 ExecStart=/usr/bin/koppeln
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
