@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.3
-FROM rust:1.58-slim-buster as build
+FROM rust:slim-trixie as build
 WORKDIR /usr/src/koppeln
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
