@@ -3,11 +3,6 @@ use koppeln::{Storage, dns, web};
 
 use config::ConfigError;
 use env_logger::Env;
-use futures::SinkExt;
-use futures::stream::StreamExt;
-use koppeln::dns::response;
-use tokio::net::UdpSocket;
-use tokio_util::udp::UdpFramed;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -27,7 +22,7 @@ async fn main() -> Result<(), ConfigError> {
     let web_server_address = SocketAddr::from((settings.web_address, settings.web_port));
     let update_server = tokio::spawn(web::create_update_server(
         web_server_address,
-        storage.clone(),
+        Arc::clone(&storage),
     ));
     log::info!(
         "HTTP server now listening on: {ip}:{port}",
@@ -35,66 +30,18 @@ async fn main() -> Result<(), ConfigError> {
         port = settings.web_port
     );
 
-    let addr = SocketAddr::from((settings.dns_address, settings.dns_port));
-    let udp_socket = UdpSocket::bind(&addr).await.unwrap();
-    let mut dns_stream = UdpFramed::new(udp_socket, dns::Codec);
+    let dns_server = dns::Server {
+        soa: settings.soa,
+        storage,
+        listen_addr: settings.dns_address,
+        listen_port: settings.dns_port,
+    };
 
-    log::info!(
-        "DNS server now listening on: {ip}:{port}",
-        ip = settings.dns_address,
-        port = settings.dns_port
-    );
+    let dns_server = tokio::spawn(dns_server.run());
 
-    let udp_server = tokio::spawn(async move {
-        log::debug!("Waiting for DNS queries...");
-        while let Some(res) = dns_stream.next().await {
-            let (query, addr) = match res {
-                Ok((query, addr)) => (query, addr),
-                Err(err) => {
-                    log::error!("{err}");
-                    continue;
-                }
-            };
-            log::debug!("DNS message received: {:?}", query);
-
-            let response = match query {
-                dns::Request::StandardQuery(query) => {
-                    let records = match storage.lock() {
-                        Ok(storage) => storage,
-                        Err(err) => {
-                            log::error!("failed to lock storage: {err}");
-                            continue;
-                        }
-                    };
-
-                    let response =
-                        dns::server::handle_standard_query(&settings.soa, &records, query);
-
-                    dns::Response::StandardQuery(response)
-                }
-                dns::Request::Unsupported(header) => heandle_unsupported(header),
-            };
-
-            log::debug!("DNS response: {:?}", response);
-            dns_stream.send((response, addr)).await.unwrap();
-        }
-    });
-
-    futures::future::try_join(update_server, udp_server)
+    futures::future::try_join(update_server, dns_server)
         .await
         .unwrap();
 
     Ok(())
-}
-
-fn heandle_unsupported(header: dns::RawHeader) -> dns::Response {
-    let header = dns::RawHeader {
-        authoritative_answer: true,
-        truncated: false,
-        recursion_available: false,
-        an_count: 0,
-        response_code: response::Rcode::NotImplemented,
-        ..header
-    };
-    dns::Response::NotImplemented(response::NotImplemented { header })
 }

@@ -6,6 +6,7 @@ pub mod server;
 pub use codec::Codec;
 pub use request::Request;
 pub use response::Response;
+pub use server::Server;
 
 use bytes::BufMut;
 use serde::{Deserialize, Serialize};
