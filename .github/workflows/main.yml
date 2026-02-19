@@ -24,3 +24,7 @@ jobs:
       - name: Install drill
         run: |
           ssh test apt-get install -y ldnsutils
+          
+      - name: Drill home
+        run: |
+          ssh test drill henku.de
