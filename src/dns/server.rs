@@ -20,6 +20,8 @@ impl Server {
     pub async fn run(self) {
         let addr = SocketAddr::from((self.listen_addr, self.listen_port));
         let udp_socket = UdpSocket::bind(&addr).await.unwrap();
+        // TODO: drop privileges
+
         let mut dns_stream = UdpFramed::new(udp_socket, dns::Codec);
 
         log::info!(
@@ -38,6 +40,7 @@ impl Server {
                 }
             };
 
+            // TODO: spawn a task for responding
             log::debug!("DNS message received: {:?}", request);
             let response = self.creat_response(request);
 
