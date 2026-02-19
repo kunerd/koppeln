@@ -28,3 +28,12 @@ jobs:
       - name: Drill home
         run: |
           ssh test drill henku.de
+          
+      - name: Create and push file into lxc container
+        run: |
+          echo "Hello lxc container" > test.txt
+          lxc file push -p text.txt test/tmp/
+
+      - name: Say hello
+        run: |
+          ssh cat /tmp/text.txt
