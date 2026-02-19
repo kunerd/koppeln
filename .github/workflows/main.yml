@@ -1,0 +1,26 @@
+name: Test
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: lkiesow/setup-lxc-container@v1
+        id: lxc
+        with:
+          dist: debian
+          release: trixie
+          python: false
+
+      - name: IP address
+        run: |
+          echo 'Container IP address: ${{ steps.lxc.outputs.ip }}'
+
+      - name: Test SSH
+        run: |
+          ssh test echo success
+          
+      - name: Install drill
+        run: |
+          ssh test apt-get install -y ldnsutils
