@@ -1,27 +1,28 @@
 use crate::{
     Storage,
-    dns::{self, DomainName, ResourceRecord, Response},
+    dns::{self, DomainName, ResourceRecord, request, response},
 };
 
 pub fn handle_standard_query(
     soa: &dns::StartOfAuthority,
     storage: &Storage,
-    query: dns::StandardQuery,
-) -> Response {
-    let mut header = dns::Header {
+    query: request::StandardQuery,
+) -> response::StandardQuery {
+    let mut header = response::Header {
+        id: query.header.id,
+        truncated: query.header.truncated,
         authoritative_answer: true,
-        truncated: false,
+        recursion_desired: query.header.recursion_desired,
         recursion_available: false,
-        an_count: 0,
-        response_code: dns::ResponseCode::NoError,
-        ..query.header
+        response_code: response::Rcode::NoError,
+        qd_count: query.header.qd_count,
     };
 
     if !matches!(
         query.question.query_type,
         dns::QueryType::A | dns::QueryType::AAAA | dns::QueryType::SOA
     ) {
-        return Response {
+        return response::StandardQuery {
             header,
             question: query.question,
             answer: vec![],
@@ -58,13 +59,12 @@ pub fn handle_standard_query(
     };
 
     if answer.is_none() {
-        header.response_code = dns::ResponseCode::NameError;
+        header.response_code = response::Rcode::NameError;
     }
 
     let answer = answer.unwrap_or_default();
 
-    header.an_count = answer.len() as u16;
-    Response {
+    response::StandardQuery {
         header,
         question: query.question,
         answer,

@@ -5,7 +5,7 @@ use config::ConfigError;
 use env_logger::Env;
 use futures::SinkExt;
 use futures::stream::StreamExt;
-use koppeln::dns::{NotImplementedResponse, codec};
+use koppeln::dns::response;
 use tokio::net::UdpSocket;
 use tokio_util::udp::UdpFramed;
 
@@ -66,8 +66,11 @@ async fn main() -> Result<(), ConfigError> {
                             continue;
                         }
                     };
-                    let msg = dns::server::handle_standard_query(&settings.soa, &records, query);
-                    codec::Response::StandardQuery(msg)
+
+                    let response =
+                        dns::server::handle_standard_query(&settings.soa, &records, query);
+
+                    dns::Response::StandardQuery(response)
                 }
                 dns::Request::Unsupported(header) => heandle_unsupported(header),
             };
@@ -84,14 +87,14 @@ async fn main() -> Result<(), ConfigError> {
     Ok(())
 }
 
-fn heandle_unsupported(header: dns::Header) -> codec::Response {
-    let header = dns::Header {
+fn heandle_unsupported(header: dns::RawHeader) -> dns::Response {
+    let header = dns::RawHeader {
         authoritative_answer: true,
         truncated: false,
         recursion_available: false,
         an_count: 0,
-        response_code: dns::ResponseCode::NotImplemented,
+        response_code: response::Rcode::NotImplemented,
         ..header
     };
-    codec::Response::NotImplemented(NotImplementedResponse { header })
+    dns::Response::NotImplemented(response::NotImplemented { header })
 }

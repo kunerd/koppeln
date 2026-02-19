@@ -19,21 +19,16 @@ fn it_handles_soa_request() {
         expire: 300,
         minimum: 400,
     };
+
     let storage = Storage::new(mname, sub_domains);
-    let query = dns::StandardQuery {
-        header: dns::Header {
+    let query = dns::request::StandardQuery {
+        header: dns::request::Header {
             id: 1234,
-            opcode: dns::OpCode::StandardQuery,
             truncated: false,
-            authoritative_answer: false,
             recursion_desired: false,
-            recursion_available: false,
-            response_code: dns::ResponseCode::NoError,
             qd_count: 1,
-            an_count: 0,
-            ns_count: 0,
-            ar_count: 0,
         },
+
         question: dns::Question {
             labels: ["dyn", "example", "com"]
                 .iter()
@@ -48,6 +43,5 @@ fn it_handles_soa_request() {
     let msg = dns::server::handle_standard_query(&soa, &storage, query);
 
     assert!(msg.header.authoritative_answer);
-    assert_eq!(msg.header.response_code, dns::ResponseCode::NoError);
-    assert_eq!(msg.header.an_count, 1, "to contain one answer record");
+    assert_eq!(msg.header.response_code, dns::response::Rcode::NoError);
 }

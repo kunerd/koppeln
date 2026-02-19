@@ -1,4 +1,4 @@
-use crate::dns;
+use crate::dns::{self, request};
 
 use nom::Parser;
 use nom::{
@@ -43,7 +43,14 @@ pub fn dns_query(input: &[u8]) -> Result<dns::Request, Error> {
             // TODO: we should check rem for remainding data, which would also
             // indicate a format error
 
-            let query = dns::StandardQuery { header, question };
+            // TODO impl From<RawHeader> for request::Header
+            let header = request::Header {
+                id: header.id,
+                truncated: header.truncated,
+                recursion_desired: header.recursion_desired,
+                qd_count: header.qd_count,
+            };
+            let query = dns::request::StandardQuery { header, question };
             dns::Request::StandardQuery(query)
         }
         dns::OpCode::InversQuery | dns::OpCode::ServerStatusRequest | dns::OpCode::Reserved(_) => {
@@ -54,7 +61,7 @@ pub fn dns_query(input: &[u8]) -> Result<dns::Request, Error> {
     Ok(request)
 }
 
-pub fn dns_header(input: &[u8]) -> IResult<&[u8], dns::Header> {
+pub fn dns_header(input: &[u8]) -> IResult<&[u8], dns::RawHeader> {
     let mut parser = (
         be_u16,
         bits((
@@ -78,7 +85,7 @@ pub fn dns_header(input: &[u8]) -> IResult<&[u8], dns::Header> {
 
     Ok((
         input,
-        dns::Header {
+        dns::RawHeader {
             id,
             opcode: opcode.into(),
             authoritative_answer: false,
@@ -219,7 +226,7 @@ mod tests {
         let raw_header = b"\x66\xf3\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
 
         let (_, header) = dns_header(raw_header).unwrap();
-        assert_eq!(header.response_code, dns::ResponseCode::NoError);
+        assert_eq!(header.response_code, dns::response::Rcode::NoError);
     }
 
     #[test]
