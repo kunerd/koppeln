@@ -21,7 +21,7 @@ jobs:
         uses: docker-practice/actions-setup-docker@master
 
       - name: Setup Docker layer cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -40,10 +40,10 @@ jobs:
         # Temp fix
         # https://github.com/docker/build-push-action/issues/252
         # https://github.com/moby/buildkit/issues/1896
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+     # - name: Move cache
+     #   run: |
+     #     rm -rf /tmp/.buildx-cache
+     #     mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Setup Linux Containers
         run: |
