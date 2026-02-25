@@ -1,4 +1,4 @@
-[![CI](https://github.com/kunerd/koppeln/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kunerd/koppeln/actions/workflows/ci.yml)
+[![build](https://github.com/kunerd/koppeln/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/kunerd/koppeln/actions/workflows/rust.yml)
 
 # Koppeln
 
