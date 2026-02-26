@@ -5,22 +5,43 @@ use tokio::net::UdpSocket;
 use tokio_util::udp::UdpFramed;
 
 use crate::{
-    SharedStorage,
+    DEFAULT_GROUP, DEFAULT_USER, SharedStorage, check_drop_privs,
     dns::{self, DomainName, ResourceRecord, request, response},
+    settings,
 };
 
 pub struct Server {
-    pub soa: dns::StartOfAuthority,
-    pub storage: SharedStorage,
-    pub listen_addr: IpAddr,
-    pub listen_port: u16,
+    storage: SharedStorage,
+
+    soa: dns::StartOfAuthority,
+
+    listen_addr: IpAddr,
+    listen_port: u16,
 }
 
 impl Server {
-    pub async fn run(self) {
+    pub fn new(settings: settings::Dns, storage: SharedStorage) -> Self {
+        Self {
+            storage,
+
+            soa: settings.soa,
+
+            listen_addr: settings.address,
+            listen_port: settings.port,
+        }
+    }
+
+    pub async fn run(self, user: Option<String>, group: Option<String>) {
         let addr = SocketAddr::from((self.listen_addr, self.listen_port));
         let udp_socket = UdpSocket::bind(&addr).await.unwrap();
-        // TODO: drop privileges
+
+        // TODO drop privileges directly after binding to the DNS AND HTTP addr
+        // Drop privileges if running as root.
+        check_drop_privs(
+            user.as_deref().unwrap_or(DEFAULT_USER),
+            group.as_deref().unwrap_or(DEFAULT_GROUP),
+        )
+        .unwrap();
 
         let mut dns_stream = UdpFramed::new(udp_socket, dns::Codec);
 

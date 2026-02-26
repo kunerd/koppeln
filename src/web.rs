@@ -7,6 +7,7 @@ use warp::Filter;
 use warp::http::StatusCode;
 
 use crate::dns::DomainName;
+use crate::settings;
 
 use super::SharedStorage;
 
@@ -16,7 +17,15 @@ pub struct UpdateInfo {
     pub ip: IpAddr,
 }
 
-pub async fn create_update_server(address: SocketAddr, storage: SharedStorage) {
+pub async fn create_update_server(config: settings::Http, storage: SharedStorage) {
+    let address = SocketAddr::from((config.address, config.port));
+
+    log::info!(
+        "HTTP server now listening on: {ip}:{port}",
+        ip = config.address,
+        port = config.port
+    );
+
     warp::serve(update_address(storage))
         .bind(address)
         .await

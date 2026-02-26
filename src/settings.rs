@@ -11,15 +11,27 @@ use crate::storage::SubDomainEntry;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
-    pub dns_address: net::IpAddr,
-    pub dns_port: u16,
+    pub user: Option<String>,
+    pub group: Option<String>,
 
-    pub web_address: net::IpAddr,
-    pub web_port: u16,
-
-    pub soa: dns::StartOfAuthority,
+    pub dns: Dns,
+    pub http: Http,
 
     pub addresses: HashMap<DomainName, SubDomainEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dns {
+    pub address: net::IpAddr,
+    pub port: u16,
+
+    pub soa: dns::StartOfAuthority,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Http {
+    pub address: net::IpAddr,
+    pub port: u16,
 }
 
 impl Settings {

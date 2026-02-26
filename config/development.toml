@@ -1,9 +1,8 @@
-dns_address = "127.0.0.1"
-dns_port = 5354
-web_address = "0.0.0.0"
-web_port = 8088
+[dns]
+address = "127.0.0.1"
+port = 5354
 
-[soa]
+[dns.soa]
 mname = "dyn.example.com"
 rname = "postmaster.example.com"
 serial = 1
@@ -11,6 +10,11 @@ refresh = 300
 retry = 900
 expire = 900
 minimum = 300
+
+
+[http]
+address = "0.0.0.0"
+port = 8088
 
 [addresses]
 "test" = { token = "super_secure" }
